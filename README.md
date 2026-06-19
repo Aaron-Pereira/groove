@@ -22,7 +22,7 @@ Your external drive is the single source of truth. Everything lives in
 brew install python@3.12 ffmpeg chromaprint
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-git clone https://github.com/YOUR_USERNAME/groove.git ~/groove
+git clone https://github.com/Aaron-Pereira/groove.git ~/groove
 cd ~/groove
 uv sync
 uv run groove init /Volumes/Music    # creates layout, prompts for free API keys
