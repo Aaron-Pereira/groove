@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Discography – {{ artist_name }} – groove{% endblock %}
+{% block content %}
+
+<h1>Discography: {{ artist_name }}</h1>
+<p>{{ albums|length }} studio album(s) found on MusicBrainz. Pick albums individually, use the header checkbox to select all, or use <strong>Queue all</strong> after confirming.</p>
+
+{% if error %}
+<div class="flash flash-error">{{ error }}</div>
+{% endif %}
+
+{% if albums %}
+<form id="discography-form" method="post" action="/bulk/discography/queue">
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:1rem">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:36px"><input type="checkbox" id="check-all" onclick="toggleAll(this)"></th>
+          <th>Album</th>
+          <th>Year</th>
+          <th>Type</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for album in albums %}
+        <tr>
+          <td><input type="checkbox" name="album_ids" value="{{ album.id }}" class="album-check"></td>
+          <td>{{ album.title }}</td>
+          <td class="text-muted mono">{{ (album.first_release_date or '')[:4] or '?' }}</td>
+          <td class="text-muted">{{ album.type }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <input type="hidden" name="artist_name" value="{{ artist_name }}">
+  <input type="hidden" name="mb_artist_id" value="{{ mb_artist_id }}">
+  <div class="flex gap-2 flex-wrap">
+    <button type="button" class="btn btn-primary"
+            onclick="queueAllAlbums({{ albums|length }}, {{ artist_name|tojson }})">
+      Queue all {{ albums|length }} album{% if albums|length != 1 %}s{% endif %}
+    </button>
+    <button type="submit" class="btn btn-secondary">Queue selected albums</button>
+    <a href="/bulk" class="btn btn-secondary">Cancel</a>
+  </div>
+</form>
+{% else %}
+<div class="empty-state">
+  <p>No albums found for "{{ artist_name }}". Try a different spelling.</p>
+  <a href="/bulk" class="btn btn-secondary mt-2">Back to Bulk Add</a>
+</div>
+{% endif %}
+
+{% endblock %}
+{% block scripts %}
+<script>
+function toggleAll(src) {
+  document.querySelectorAll('.album-check').forEach(c => { c.checked = src.checked; });
+}
+
+/** A1: select every album checkbox and submit the same POST as "Queue selected". */
+function queueAllAlbums(count, artist) {
+  const label = count === 1 ? '1 album' : count + ' albums';
+  const msg = 'Queue ' + label + ' for "' + artist + '"?\n\nThis adds ' + count +
+    ' download(s) to the queue and may take a long time.';
+  if (!confirm(msg)) return;
+  document.querySelectorAll('.album-check').forEach(c => { c.checked = true; });
+  const master = document.getElementById('check-all');
+  if (master) master.checked = true;
+  document.getElementById('discography-form').submit();
+}
+</script>
+{% endblock %}

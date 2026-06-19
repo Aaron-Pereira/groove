@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Discoveries – groove{% endblock %}
+{% block content %}
+
+<details class="help-panel">
+  <summary class="help-toggle"><span class="arrow">▶</span> How this works</summary>
+  <div class="help-body">
+    <h3>Where discoveries come from</h3>
+    <ul>
+      <li>Daily: Billboard Hot 100, UK Official Top 40, Last.fm global chart, and your configured genre charts.</li>
+      <li>Weekly: New releases on MusicBrainz for artists in your <a href="/watchlist">Watchlist</a>.</li>
+    </ul>
+    <h3>Auto-queue rules</h3>
+    <p>Tracks that appear on <strong>{{ min_appearances }}</strong> or more charts this week are automatically queued at low priority. Adjust <code>auto_queue.min_chart_appearances</code> in <code>groove.toml</code>.</p>
+    <h3>Actions</h3>
+    <ul>
+      <li><strong>Add to queue</strong> – sends the track to the download queue at normal priority.</li>
+      <li><strong>Dismiss</strong> – hides it from this view (archived nightly).</li>
+    </ul>
+  </div>
+</details>
+
+<div class="flex items-center justify-between mb-2">
+  <div>
+    <h1>Discoveries</h1>
+    <p>{{ discoveries|length }} undismissed · last scraped {{ last_run or 'never' }}</p>
+  </div>
+  <form hx-post="/api/scrape" hx-swap="none" hx-indicator="#scrape-spinner">
+    <button class="btn btn-secondary">
+      <span class="htmx-indicator spinner" id="scrape-spinner"></span>
+      Run scrape now
+    </button>
+  </form>
+</div>
+
+<!-- Filter tabs -->
+<div class="flex gap-2 mb-2" style="flex-wrap:wrap">
+  {% for source in sources %}
+  <a href="?source={{ source }}" class="btn btn-sm {{ 'btn-primary' if active_source == source else 'btn-secondary' }}">
+    {{ source.replace('_', ' ').title() }}
+  </a>
+  {% endfor %}
+  {% if active_source %}
+  <a href="/discoveries" class="btn btn-sm btn-secondary">Clear filter</a>
+  {% endif %}
+</div>
+
+{% if discoveries %}
+<div class="card" style="padding:0;overflow:hidden">
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Artist</th>
+        <th>Track / Album</th>
+        <th>Source</th>
+        <th>Seen</th>
+        <th>Appearances</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for d in discoveries %}
+      <tr id="disc-{{ d.id }}">
+        <td class="text-muted mono">{{ d.chart_rank or '—' }}</td>
+        <td>{{ d.artist }}</td>
+        <td>{{ d.title or d.album or '—' }}</td>
+        <td><span class="badge badge-searching">{{ d.source.replace('_', ' ') }}</span></td>
+        <td class="text-muted mono" style="font-size:.8rem">{{ d.seen_at.strftime('%m/%d') }}</td>
+        <td class="text-muted">{{ d.appearances }}</td>
+        <td>
+          {% if not d.auto_queued %}
+          <form hx-post="/api/discovery/{{ d.id }}/queue" hx-target="#disc-{{ d.id }}" hx-swap="outerHTML" style="display:inline">
+            <button class="btn btn-sm btn-primary">+ Queue</button>
+          </form>
+          {% else %}
+          <span class="badge badge-pending">queued</span>
+          {% endif %}
+          <form hx-delete="/api/discovery/{{ d.id }}" hx-target="#disc-{{ d.id }}" hx-swap="outerHTML" style="display:inline">
+            <button class="btn btn-sm btn-secondary">Dismiss</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state">
+  <div class="icon">🔍</div>
+  <p>No discoveries yet. Run a scrape to populate this list.</p>
+</div>
+{% endif %}
+
+{% endblock %}

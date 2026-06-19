@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Queue – groove{% endblock %}
+{% block content %}
+
+<details class="help-panel">
+  <summary class="help-toggle">
+    <span class="arrow">▶</span> How this works
+  </summary>
+  <div class="help-body">
+    <h3>Adding music to your queue</h3>
+    <ul>
+      <li>Type <code>Artist - Song Title</code> for a single track, or <code>Artist - Album Name</code> for a full album.</li>
+      <li>Paste a YouTube URL directly to download from a specific video.</li>
+      <li>The worker downloads the audio, then beets matches it against MusicBrainz for proper tags and files it into your library.</li>
+      <li>High-priority requests jump ahead of bulk imports. Use <a href="/bulk">Bulk Add</a> for large batches.</li>
+    </ul>
+    <h3>Status meanings</h3>
+    <ul>
+      <li><strong>pending</strong> – waiting in queue &nbsp;|&nbsp; <strong>searching</strong> – finding best match on YouTube</li>
+      <li><strong>downloading</strong> – fetching audio &nbsp;|&nbsp; <strong>tagging</strong> – beets is matching + filing</li>
+      <li><strong>done</strong> – in your library &nbsp;|&nbsp; <strong>failed</strong> – click Retry or supply a URL</li>
+    </ul>
+  </div>
+</details>
+
+<div class="card-header" style="margin-bottom:1rem">
+  <div>
+    <h1>Queue</h1>
+    <p>{{ stats.get('pending', 0) }} pending · {{ stats.get('downloading', 0) + stats.get('tagging', 0) + stats.get('searching', 0) }} in progress · {{ stats.get('done', 0) }} done</p>
+  </div>
+</div>
+
+<!-- Add form -->
+<div class="card">
+  <h2 style="margin-bottom:.75rem">Add music</h2>
+  <form hx-post="/api/request" hx-target="#queue-table" hx-swap="outerHTML" hx-indicator="#add-spinner">
+    <div class="form-row">
+      <div class="form-group" style="flex:2">
+        <label>
+          Artist – Title or Album
+          <span class="tooltip-wrap">
+            <span class="tooltip-icon">?</span>
+            <span class="tooltip-text">Examples: "The Beatles - Abbey Road" or paste a YouTube URL</span>
+          </span>
+        </label>
+        <input type="text" name="query" placeholder="e.g. Arctic Monkeys - AM" required autocomplete="off">
+      </div>
+      <div class="form-group" style="flex:0 0 130px">
+        <label>Kind
+          <span class="tooltip-wrap">
+            <span class="tooltip-icon">?</span>
+            <span class="tooltip-text">Track = single song. Album = tries to download all tracks.</span>
+          </span>
+        </label>
+        <select name="kind">
+          <option value="track">Track</option>
+          <option value="album">Album</option>
+        </select>
+      </div>
+      <div class="form-group" style="flex:0 0 120px">
+        <label>Priority</label>
+        <select name="priority">
+          <option value="high">High</option>
+          <option value="normal" selected>Normal</option>
+          <option value="low">Low</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary" style="align-self:flex-end">
+        <span class="htmx-indicator spinner" id="add-spinner"></span>
+        Add to queue
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- Queue table – auto-refreshes every 4 seconds while any request is in-flight.
+     The partial already renders <div id="queue-table"> so we use hx-get on a
+     plain wrapper and let HTMX replace the partial's own root element. -->
+<div hx-get="/api/queue"
+     hx-trigger="load, every 4s [document.querySelector('.badge-searching, .badge-downloading, .badge-tagging')]"
+     hx-target="#queue-table"
+     hx-swap="outerHTML">
+  {% include "partials/queue_table.html" %}
+</div>
+
+{% endblock %}

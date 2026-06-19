@@ -1,0 +1,74 @@
+# beets configuration for groove
+# Managed by groove – edit with care.
+# To pick up changes: groove metadata rescan
+
+directory: /Volumes/Music/groove/library
+library: /Volumes/Music/groove/db/musiclib.db
+
+import:
+  move: true        # move files from inbox/ into library/ (not copy)
+  write: true       # write tags to file after import
+  copy: false
+  resume: ask       # resume interrupted imports
+  incremental: yes  # skip already-imported directories
+  quiet_fallback: skip   # skip when no confident MusicBrainz match (prevents bad track numbers)
+  duplicate_action: merge  # merge re-imports when updating tags in place
+  log: /Volumes/Music/groove/logs/beets-import.log
+
+paths:
+  default: $albumartist/$album%aunique{} ($year)/$track - $title
+  singleton: Non-Album/$artist/$title
+  comp: Compilations/$album%aunique{} ($year)/$track - $title
+
+plugins:
+  - musicbrainz
+  - fetchart
+  - embedart
+  - lyrics
+  - replaygain
+  - lastgenre
+  - scrub
+  - duplicates
+  - chroma
+  - mbsync
+
+fetchart:
+  auto: yes
+  maxwidth: 600
+  quality: 95
+
+embedart:
+  auto: yes
+  maxwidth: 600
+
+lastgenre:
+  auto: yes
+  source: album  # album → track → artist fallback
+  count: 1
+  prefer_specific: yes
+
+chroma:
+  auto: yes
+  # Requires ACOUSTID_APIKEY env var (set by groove from groove.toml)
+
+replaygain:
+  auto: yes
+  backend: ffmpeg  # no external tool needed
+
+scrub:
+  auto: yes  # remove junk tags on import
+
+duplicates:
+  checksum: yes  # detect exact duplicates by audio fingerprint
+
+lyrics:
+  auto: no   # fetch lyrics on demand, not on every import (slow)
+  sources: genius musixmatch
+
+# MusicBrainz rate-limit compliance
+musicbrainz:
+  searchlimit: 5
+  extra_tags: [year, catalognum, country, label, media, disctotal]
+
+match:
+  strong_rec_thresh: 0.20

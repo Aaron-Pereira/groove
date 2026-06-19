@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Always-on groove web server + background worker.
+
+  Load:    launchctl load -w ~/Library/LaunchAgents/com.groove.server.plist
+  Unload:  launchctl unload ~/Library/LaunchAgents/com.groove.server.plist
+  Status:  launchctl list | grep groove
+  Logs:    tail -f /Volumes/Music/groove/logs/server.log
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.groove.server</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>-c</string>
+    <string>
+      export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin:$PATH";
+      cd "__GROOVE_REPO__";
+      exec uv run groove serve
+    </string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Volumes/Music/groove/logs/server.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Volumes/Music/groove/logs/server-error.log</string>
+
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+</dict>
+</plist>

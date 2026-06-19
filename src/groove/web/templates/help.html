@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Help – groove{% endblock %}
+{% block content %}
+
+<h1>Help</h1>
+<p>Quick reference for every groove feature.</p>
+
+<details class="help-panel" open>
+  <summary class="help-toggle"><span class="arrow">▶</span> Queue (home page)</summary>
+  <div class="help-body">
+    <h3>Adding a single track or album</h3>
+    <ul>
+      <li>Type <code>Artist - Song Title</code> or <code>Artist - Album Name</code> in the Add form, choose Track or Album, hit Enter.</li>
+      <li>Paste a YouTube URL directly to download from a specific video.</li>
+    </ul>
+    <h3>Status meanings</h3>
+    <ul>
+      <li><strong>pending</strong> – waiting in queue.</li>
+      <li><strong>searching</strong> – groove is finding the best YouTube match.</li>
+      <li><strong>downloading</strong> – yt-dlp is fetching the audio (MP3 192 kbps).</li>
+      <li><strong>tagging</strong> – beets is looking up MusicBrainz and filing into your library.</li>
+      <li><strong>done</strong> – file is in <code>library/Artist/Album (Year)/</code>.</li>
+      <li><strong>failed</strong> – something went wrong. Click Retry, or supply a manual YouTube URL.</li>
+    </ul>
+  </div>
+</details>
+
+<details class="help-panel">
+  <summary class="help-toggle"><span class="arrow">▶</span> Bulk Add</summary>
+  <div class="help-body">
+    <h3>Supported formats</h3>
+    <ul>
+      <li><strong>Plain text</strong> – one entry per line: <code>Artist - Album</code>, <code>Artist - Song</code>, or a URL.</li>
+      <li><strong>Spotify / Exportify CSV</strong> – export at <a href="https://exportify.net">exportify.net</a>, upload here.</li>
+      <li><strong>Generic CSV</strong> – any CSV with artist/title/album columns.</li>
+      <li><strong>YouTube playlist URL</strong> – groove expands it to individual tracks.</li>
+      <li><strong>Artist discography</strong> – type artist name, pick albums from MusicBrainz, or use <strong>Queue all</strong> after the confirmation prompt.</li>
+    </ul>
+    <p>All bulk requests are <strong>priority: low</strong>. A preview step shows what's new vs. already in library.</p>
+  </div>
+</details>
+
+<details class="help-panel">
+  <summary class="help-toggle"><span class="arrow">▶</span> Discoveries</summary>
+  <div class="help-body">
+    <h3>Chart sources</h3>
+    <ul>
+      <li>Billboard Hot 100 – scraped daily.</li>
+      <li>UK Official Top 40 – scraped daily.</li>
+      <li>Last.fm global top tracks – scraped daily.</li>
+      <li>Last.fm genre charts (rock, hip-hop, electronic, and any genres you add in <code>groove.toml</code>) – daily.</li>
+      <li>MusicBrainz new releases for your watchlist artists – weekly.</li>
+    </ul>
+    <h3>Auto-queue</h3>
+    <p>Tracks appearing on <strong>2 or more</strong> charts this week are auto-queued at low priority. Change the threshold in <code>groove.toml</code> under <code>[auto_queue]</code>.</p>
+  </div>
+</details>
+
+<details class="help-panel">
+  <summary class="help-toggle"><span class="arrow">▶</span> Watchlist</summary>
+  <div class="help-body">
+    <ul>
+      <li>Artists you add here are checked weekly against MusicBrainz for new albums.</li>
+      <li>Enable <strong>Auto-download new albums</strong> to have groove queue new releases automatically.</li>
+      <li>Without that toggle, new releases still appear in Discoveries for manual queuing.</li>
+    </ul>
+  </div>
+</details>
+
+<details class="help-panel">
+  <summary class="help-toggle"><span class="arrow">▶</span> Library</summary>
+  <div class="help-body">
+    <ul>
+      <li>Browse all your music by artist, album, title, or year.</li>
+      <li>Click <strong>Edit</strong> on any track to update tags (calls <code>beet modify</code> under the hood).</li>
+      <li>After editing tags in an external tool, run <code>groove metadata rescan</code> to re-sync beets.</li>
+    </ul>
+  </div>
+</details>
+
+<details class="help-panel">
+  <summary class="help-toggle"><span class="arrow">▶</span> Review</summary>
+  <div class="help-body">
+    <p>Files that beets couldn't auto-match land in <code>inbox/review/</code>. Accept a MusicBrainz candidate, or enter tags manually to re-import.</p>
+  </div>
+</details>
+
+<details class="help-panel">
+  <summary class="help-toggle"><span class="arrow">▶</span> Troubleshooting</summary>
+  <div class="help-body">
+    <h3>Common issues</h3>
+    <ul>
+      <li><strong>Download failed</strong> – click Retry in the queue, or supply a manual YouTube URL.</li>
+      <li><strong>Wrong album match</strong> – run <code>beet import -L "album:Name"</code> in a terminal.</li>
+      <li><strong>Wrong tags</strong> – use the Edit button, or <code>beet modify</code> on the CLI.</li>
+      <li><strong>Drive unplugged mid-download</strong> – worker pauses automatically; replug and it resumes.</li>
+      <li><strong>Storage full</strong> – run <code>groove doctor</code> to see usage and get guidance.</li>
+    </ul>
+    <p>Run <code>groove doctor</code> to diagnose any setup issues.</p>
+  </div>
+</details>
+
+{% endblock %}

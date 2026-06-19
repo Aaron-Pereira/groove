@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}groove{% endblock %}</title>
+  <script src="https://unpkg.com/htmx.org@1.9.12" crossorigin="anonymous"></script>
+  <style>
+    /* ── Reset & variables ─────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:       #0f0f12;
+      --surface:  #1a1a22;
+      --card:     #22222c;
+      --border:   #2e2e3a;
+      --text:     #e8e8f0;
+      --muted:    #8080a0;
+      --accent:   #7c5cfc;
+      --accent2:  #5caafc;
+      --green:    #3ddc84;
+      --red:      #ff5c5c;
+      --yellow:   #ffc840;
+      --radius:   8px;
+      --font:     'Inter', 'Segoe UI', system-ui, sans-serif;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 15px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── Layout ────────────────────────────────────────────── */
+    .shell { display: flex; min-height: 100vh; }
+    .sidebar {
+      width: 220px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 1.5rem 0;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    .main { flex: 1; padding: 2rem; max-width: 1100px; }
+
+    /* ── Sidebar ───────────────────────────────────────────── */
+    .sidebar-logo {
+      display: block;
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--accent);
+      text-decoration: none;
+      padding: 0 1.5rem 1.5rem;
+      letter-spacing: -.5px;
+    }
+    .sidebar-logo span { color: var(--text); }
+    nav a {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      padding: .55rem 1.5rem;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: .9rem;
+      border-left: 3px solid transparent;
+      transition: color .15s, border-color .15s, background .15s;
+    }
+    nav a:hover { color: var(--text); background: rgba(124,92,252,.08); }
+    nav a.active { color: var(--accent); border-left-color: var(--accent); background: rgba(124,92,252,.12); }
+    .nav-section {
+      font-size: .7rem;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--muted);
+      padding: 1rem 1.5rem .3rem;
+    }
+
+    /* ── Typography ────────────────────────────────────────── */
+    h1 { font-size: 1.6rem; font-weight: 700; margin-bottom: .5rem; }
+    h2 { font-size: 1.2rem; font-weight: 600; margin-bottom: .4rem; }
+    h3 { font-size: 1rem; font-weight: 600; }
+    p { color: var(--muted); margin-bottom: .75rem; }
+
+    /* ── Cards ─────────────────────────────────────────────── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1rem;
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+
+    /* ── Badges / status ───────────────────────────────────── */
+    .badge {
+      display: inline-block;
+      padding: .15rem .55rem;
+      border-radius: 20px;
+      font-size: .75rem;
+      font-weight: 600;
+      letter-spacing: .02em;
+    }
+    .badge-pending    { background: rgba(255,200,64,.15);  color: var(--yellow); }
+    .badge-searching  { background: rgba(92,170,252,.15);  color: var(--accent2); }
+    .badge-downloading{ background: rgba(92,170,252,.2);   color: var(--accent2); }
+    .badge-tagging    { background: rgba(124,92,252,.2);   color: var(--accent); }
+    .badge-done       { background: rgba(61,220,132,.15);  color: var(--green); }
+    .badge-failed     { background: rgba(255,92,92,.15);   color: var(--red); }
+    .badge-dismissed  { background: rgba(128,128,160,.15); color: var(--muted); }
+
+    /* ── Forms ─────────────────────────────────────────────── */
+    .form-row { display: flex; gap: .75rem; align-items: flex-end; flex-wrap: wrap; margin-bottom: .75rem; }
+    .form-group { display: flex; flex-direction: column; gap: .3rem; flex: 1; min-width: 0; }
+    label { font-size: .82rem; color: var(--muted); }
+    input[type="text"], input[type="url"], textarea, select {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      padding: .55rem .8rem;
+      font-size: .9rem;
+      font-family: inherit;
+      width: 100%;
+      outline: none;
+      transition: border-color .15s;
+    }
+    input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+    textarea { resize: vertical; min-height: 120px; }
+    .form-hint { font-size: .78rem; color: var(--muted); margin-top: .2rem; }
+
+    /* ── Buttons ───────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      padding: .55rem 1.1rem;
+      border-radius: var(--radius);
+      font-size: .875rem;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      text-decoration: none;
+      transition: opacity .15s, transform .08s;
+      white-space: nowrap;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { opacity: .88; }
+    .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-danger { background: rgba(255,92,92,.15); color: var(--red); border: 1px solid rgba(255,92,92,.3); }
+    .btn-danger:hover { background: rgba(255,92,92,.25); }
+    .btn-sm { padding: .3rem .7rem; font-size: .8rem; }
+
+    /* ── Table ─────────────────────────────────────────────── */
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      font-size: .78rem;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--muted);
+      font-weight: 600;
+      padding: .6rem .8rem;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+    }
+    td { padding: .65rem .8rem; border-bottom: 1px solid rgba(46,46,58,.7); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,.02); }
+
+    /* ── Help panel ────────────────────────────────────────── */
+    .help-panel {
+      background: rgba(124,92,252,.07);
+      border: 1px solid rgba(124,92,252,.2);
+      border-radius: var(--radius);
+      margin-bottom: 1.5rem;
+    }
+    .help-toggle {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      padding: .75rem 1rem;
+      cursor: pointer;
+      user-select: none;
+      font-size: .85rem;
+      color: var(--accent);
+      list-style: none;
+    }
+    .help-toggle::marker, .help-toggle::-webkit-details-marker { display: none; }
+    .help-toggle .arrow { transition: transform .2s; }
+    details[open] .help-toggle .arrow { transform: rotate(90deg); }
+    .help-body {
+      padding: .25rem 1rem 1rem;
+      font-size: .87rem;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+    .help-body h3 { color: var(--text); margin-bottom: .35rem; }
+    .help-body code { background: var(--surface); padding: .1rem .35rem; border-radius: 4px; font-size: .83rem; color: var(--accent2); }
+    .help-body ul { padding-left: 1.2rem; margin-bottom: .5rem; }
+
+    /* ── Tooltip ───────────────────────────────────────────── */
+    .tooltip-wrap { position: relative; display: inline-block; }
+    .tooltip-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--border);
+      color: var(--muted);
+      font-size: .7rem;
+      cursor: default;
+      vertical-align: middle;
+      margin-left: .25rem;
+    }
+    .tooltip-text {
+      display: none;
+      position: absolute;
+      bottom: 125%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: .5rem .75rem;
+      font-size: .8rem;
+      color: var(--text);
+      white-space: nowrap;
+      z-index: 100;
+      box-shadow: 0 4px 12px rgba(0,0,0,.4);
+    }
+    .tooltip-wrap:hover .tooltip-text { display: block; }
+
+    /* ── Progress bar ──────────────────────────────────────── */
+    .progress-bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width .4s; }
+
+    /* ── Misc utils ────────────────────────────────────────── */
+    .text-muted { color: var(--muted); }
+    .text-green { color: var(--green); }
+    .text-red   { color: var(--red); }
+    .text-yellow{ color: var(--yellow); }
+    .mt-1 { margin-top: .5rem; }
+    .mt-2 { margin-top: 1rem; }
+    .mt-3 { margin-top: 1.5rem; }
+    .mb-1 { margin-bottom: .5rem; }
+    .flex { display: flex; }
+    .gap-2 { gap: .75rem; }
+    .items-center { align-items: center; }
+    .justify-between { justify-content: space-between; }
+    .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mono { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: .85em; }
+    .empty-state { text-align: center; padding: 3rem 1rem; color: var(--muted); }
+    .empty-state .icon { font-size: 2.5rem; margin-bottom: .75rem; }
+
+    /* ── HTMX indicator ────────────────────────────────────── */
+    .htmx-indicator { display: none; }
+    .htmx-request .htmx-indicator { display: inline-block; }
+    .spinner {
+      width: 14px; height: 14px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Flash messages ────────────────────────────────────── */
+    .flash { padding: .7rem 1rem; border-radius: var(--radius); margin-bottom: 1rem; font-size: .875rem; }
+    .flash-success { background: rgba(61,220,132,.12); border: 1px solid rgba(61,220,132,.3); color: var(--green); }
+    .flash-error   { background: rgba(255,92,92,.12);  border: 1px solid rgba(255,92,92,.3);  color: var(--red); }
+    .flash-info    { background: rgba(92,170,252,.1);  border: 1px solid rgba(92,170,252,.3); color: var(--accent2); }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <a href="/" class="sidebar-logo">groove<span>.</span></a>
+    <nav>
+      <div class="nav-section">Library</div>
+      <a href="/" class="{{ 'active' if active_page == 'queue' }}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        Queue
+      </a>
+      <a href="/bulk" class="{{ 'active' if active_page == 'bulk' }}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Bulk Add
+      </a>
+      <a href="/library" class="{{ 'active' if active_page == 'library' }}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        Library
+      </a>
+      <a href="/review" class="{{ 'active' if active_page == 'review' }}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Review
+        {% if review_count and review_count > 0 %}<span class="badge badge-failed" style="margin-left:auto">{{ review_count }}</span>{% endif %}
+      </a>
+
+      <div class="nav-section">Discover</div>
+      <a href="/discoveries" class="{{ 'active' if active_page == 'discoveries' }}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Discoveries
+      </a>
+      <a href="/watchlist" class="{{ 'active' if active_page == 'watchlist' }}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        Watchlist
+      </a>
+
+      <div class="nav-section">Help</div>
+      <a href="/help" class="{{ 'active' if active_page == 'help' }}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Help
+      </a>
+    </nav>
+  </aside>
+  <main class="main">
+    {% block content %}{% endblock %}
+  </main>
+</div>
+{% block scripts %}{% endblock %}
+</body>
+</html>

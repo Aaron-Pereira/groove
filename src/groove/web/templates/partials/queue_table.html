@@ -1,0 +1,53 @@
+<div id="queue-table">
+{% if requests %}
+<div class="card" style="padding:0; overflow:hidden">
+  <table>
+    <thead>
+      <tr>
+        <th>Track / Album</th>
+        <th>Kind</th>
+        <th>Priority</th>
+        <th>Status</th>
+        <th>Created</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for req in requests %}
+      <tr>
+        <td>
+          <div class="truncate" style="max-width:320px">{{ req.raw_query }}</div>
+          {% if req.error and req.status == 'failed' %}
+            <div class="text-muted" style="font-size:.78rem;margin-top:.2rem" title="{{ req.error }}">
+              ⚠ {{ req.error[:80] }}{% if req.error|length > 80 %}…{% endif %}
+            </div>
+          {% endif %}
+        </td>
+        <td class="text-muted">{{ req.kind }}</td>
+        <td class="text-muted">{{ req.priority }}</td>
+        <td><span class="badge badge-{{ req.status }}">{{ req.status }}</span></td>
+        <td class="text-muted mono" style="font-size:.8rem">{{ req.created_at.strftime('%m/%d %H:%M') }}</td>
+        <td>
+          {% if req.status == 'failed' %}
+            <form hx-post="/api/request/{{ req.id }}/retry" hx-target="#queue-table" hx-swap="outerHTML" style="display:inline">
+              <button class="btn btn-sm btn-secondary">Retry</button>
+            </form>
+          {% endif %}
+          {% if req.status in ('pending', 'failed') %}
+            <form hx-delete="/api/request/{{ req.id }}" hx-target="#queue-table" hx-swap="outerHTML" hx-confirm="Remove this request?" style="display:inline">
+              <button class="btn btn-sm btn-danger">✕</button>
+            </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state">
+  <div class="icon">🎵</div>
+  <p>Queue is empty. Add a song above to get started.</p>
+</div>
+{% endif %}
+</div>

@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Bulk Add – groove{% endblock %}
+{% block content %}
+
+<details class="help-panel">
+  <summary class="help-toggle"><span class="arrow">▶</span> How this works</summary>
+  <div class="help-body">
+    <h3>Supported input formats (auto-detected)</h3>
+    <ul>
+      <li><strong>Plain text</strong> – one entry per line: <code>Artist - Album</code>, <code>Artist - Song</code>, or a YouTube URL. Lines starting with <code>#</code> are ignored.</li>
+      <li><strong>Spotify/Exportify CSV</strong> – export your liked songs at <a href="https://exportify.net" target="_blank">exportify.net</a>, upload the .csv here. groove auto-detects the Spotify format.</li>
+      <li><strong>Generic CSV</strong> – any CSV with artist/title/album columns (flexible header detection).</li>
+      <li><strong>YouTube playlist URL</strong> – paste a playlist URL; groove expands it into individual tracks via yt-dlp.</li>
+      <li><strong>Artist discography</strong> – type an artist name, pick albums from MusicBrainz, or use <strong>Queue all</strong> on the next page.</li>
+    </ul>
+    <p>All bulk requests get <strong>priority: low</strong> so on-demand requests jump ahead. You'll see a dedup preview before anything is queued.</p>
+  </div>
+</details>
+
+<h1>Bulk Add</h1>
+<p>Paste a list, upload a file, or use the discography picker.</p>
+
+{% if flash %}
+<div class="flash flash-{{ flash.type }}">{{ flash.message }}</div>
+{% endif %}
+
+{% if preview %}
+<!-- Preview step -->
+<div class="card">
+  <h2>Preview — {{ preview.to_queue|length }} to queue</h2>
+  <div class="flex gap-2 mt-1 mb-2">
+    <span class="badge badge-done">{{ preview.to_queue|length }} new</span>
+    <span class="badge badge-searching">{{ preview.in_library|length }} already in library</span>
+    <span class="badge badge-pending">{{ preview.already_pending|length }} already pending</span>
+    <span class="badge badge-failed">{{ preview.errors|length }} parse errors</span>
+  </div>
+  {% if preview.to_queue %}
+  <div style="max-height:300px;overflow-y:auto;margin-bottom:1rem">
+    <table>
+      <thead><tr><th>Query</th><th>Kind</th><th>Artist</th><th>Title / Album</th></tr></thead>
+      <tbody>
+      {% for e in preview.to_queue[:100] %}
+        <tr>
+          <td class="truncate mono" style="max-width:220px;font-size:.8rem">{{ e.raw_query }}</td>
+          <td class="text-muted">{{ e.kind }}</td>
+          <td class="truncate" style="max-width:160px">{{ e.artist or '—' }}</td>
+          <td class="truncate" style="max-width:160px">{{ e.title or e.album or '—' }}</td>
+        </tr>
+      {% endfor %}
+      {% if preview.to_queue|length > 100 %}
+        <tr><td colspan="4" class="text-muted" style="text-align:center">… and {{ preview.to_queue|length - 100 }} more</td></tr>
+      {% endif %}
+      </tbody>
+    </table>
+  </div>
+  <form method="post" action="/bulk/confirm">
+    <input type="hidden" name="batch_id" value="{{ preview.batch_id }}">
+    <div class="flex gap-2">
+      <button type="submit" class="btn btn-primary">Confirm – queue {{ preview.to_queue|length }} tracks</button>
+      <a href="/bulk" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+  {% else %}
+  <p>Nothing new to queue – all entries are already in your library or pending.</p>
+  <a href="/bulk" class="btn btn-secondary">Back</a>
+  {% endif %}
+</div>
+
+{% else %}
+<!-- Input step -->
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; align-items:start">
+
+  <!-- Text paste -->
+  <div class="card">
+    <h2 style="margin-bottom:.75rem">Paste text</h2>
+    <form method="post" action="/bulk/preview">
+      <div class="form-group" style="margin-bottom:.75rem">
+        <label>One entry per line (Artist – Title, or a URL)</label>
+        <textarea name="text" placeholder="The Beatles - Abbey Road&#10;Radiohead - OK Computer&#10;https://youtu.be/..."  rows="8"></textarea>
+      </div>
+      <button type="submit" class="btn btn-primary">Preview →</button>
+    </form>
+  </div>
+
+  <!-- File upload -->
+  <div class="card">
+    <h2 style="margin-bottom:.75rem">Upload file</h2>
+    <form method="post" action="/bulk/preview" enctype="multipart/form-data">
+      <div class="form-group" style="margin-bottom:.75rem">
+        <label>CSV or .txt file (Exportify, generic CSV, plain text)</label>
+        <input type="file" name="file" accept=".csv,.txt" style="padding:.4rem">
+      </div>
+      <div class="form-hint mb-1">Exportify CSV from <a href="https://exportify.net" target="_blank">exportify.net</a> is auto-detected.</div>
+      <button type="submit" class="btn btn-primary">Preview →</button>
+    </form>
+  </div>
+
+  <!-- YouTube playlist -->
+  <div class="card">
+    <h2 style="margin-bottom:.75rem">YouTube playlist</h2>
+    <form method="post" action="/bulk/preview">
+      <div class="form-group" style="margin-bottom:.75rem">
+        <label>Playlist URL</label>
+        <input type="url" name="text" placeholder="https://www.youtube.com/playlist?list=...">
+      </div>
+      <button type="submit" class="btn btn-primary">Expand playlist →</button>
+    </form>
+  </div>
+
+  <!-- Artist discography -->
+  <div class="card">
+    <h2 style="margin-bottom:.75rem">Artist discography</h2>
+    <form method="get" action="/bulk/discography">
+      <div class="form-group" style="margin-bottom:.75rem">
+        <label>Artist name</label>
+        <input type="text" name="artist" placeholder="e.g. Arctic Monkeys">
+      </div>
+      <button type="submit" class="btn btn-secondary">Look up on MusicBrainz →</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Watchlist – groove{% endblock %}
+{% block content %}
+
+<details class="help-panel">
+  <summary class="help-toggle"><span class="arrow">▶</span> How this works</summary>
+  <div class="help-body">
+    <h3>Artist watchlist</h3>
+    <p>Artists you add here are checked weekly against MusicBrainz for new release-groups.</p>
+    <ul>
+      <li>Toggle <strong>Auto-download new albums</strong> to have groove automatically queue any new studio album.</li>
+      <li>New releases show up in <a href="/discoveries">Discoveries</a> regardless of this toggle, so you can queue them manually.</li>
+      <li>Providing the MusicBrainz Artist ID ensures exact matching (find it at <a href="https://musicbrainz.org" target="_blank">musicbrainz.org</a>).</li>
+    </ul>
+  </div>
+</details>
+
+<div class="flex items-center justify-between mb-2">
+  <div>
+    <h1>Watchlist</h1>
+    <p>{{ artists|length }} artist(s) being tracked for new releases.</p>
+  </div>
+</div>
+
+<!-- Add artist -->
+<div class="card">
+  <h2 style="margin-bottom:.75rem">Add artist</h2>
+  <form hx-post="/api/watchlist" hx-target="#watchlist-table" hx-swap="outerHTML">
+    <div class="form-row">
+      <div class="form-group">
+        <label>Artist name</label>
+        <input type="text" name="name" placeholder="e.g. Arctic Monkeys" required>
+      </div>
+      <div class="form-group">
+        <label>
+          MusicBrainz Artist ID
+          <span class="tooltip-wrap">
+            <span class="tooltip-icon">?</span>
+            <span class="tooltip-text">Optional. Find it on musicbrainz.org for exact matching. Looks like: ada7a83c-e3b1-40b1-96ba-43200a6cbc19</span>
+          </span>
+        </label>
+        <input type="text" name="mb_artist_id" placeholder="optional MBID">
+      </div>
+      <div class="form-group" style="flex:0 0 auto;justify-content:flex-end;flex-direction:row;align-items:center;gap:.5rem">
+        <label style="margin:0;cursor:pointer;display:flex;align-items:center;gap:.4rem">
+          <input type="checkbox" name="auto_download" value="1"> Auto-download new albums
+        </label>
+      </div>
+      <button type="submit" class="btn btn-primary" style="align-self:flex-end">Add</button>
+    </div>
+  </form>
+</div>
+
+<!-- Artist table -->
+<div id="watchlist-table">
+{% if artists %}
+<div class="card" style="padding:0;overflow:hidden">
+  <table>
+    <thead>
+      <tr>
+        <th>Artist</th>
+        <th>MusicBrainz ID</th>
+        <th>Auto-download</th>
+        <th>Added</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for a in artists %}
+      <tr id="watch-{{ loop.index }}">
+        <td><strong>{{ a.name }}</strong></td>
+        <td class="mono text-muted" style="font-size:.8rem">{{ a.mb_artist_id or '—' }}</td>
+        <td>
+          <label style="cursor:pointer;display:flex;align-items:center;gap:.4rem">
+            <input type="checkbox"
+              hx-post="/api/watchlist/{{ a.name | urlencode }}/toggle-auto"
+              hx-swap="none"
+              {{ 'checked' if a.auto_download_new_albums }}>
+            <span class="{{ 'text-green' if a.auto_download_new_albums else 'text-muted' }}">
+              {{ 'On' if a.auto_download_new_albums else 'Off' }}
+            </span>
+          </label>
+        </td>
+        <td class="text-muted mono" style="font-size:.8rem">{{ a.added_at.strftime('%Y-%m-%d') }}</td>
+        <td>
+          <form hx-delete="/api/watchlist/{{ a.name | urlencode }}" hx-target="#watchlist-table" hx-swap="outerHTML" hx-confirm="Remove {{ a.name }} from watchlist?">
+            <button class="btn btn-sm btn-danger">Remove</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state">
+  <div class="icon">👁</div>
+  <p>No artists on your watchlist yet. Add one above.</p>
+</div>
+{% endif %}
+</div>
+
+{% endblock %}

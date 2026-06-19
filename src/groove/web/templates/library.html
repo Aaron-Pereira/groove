@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Library – groove{% endblock %}
+{% block content %}
+
+<details class="help-panel">
+  <summary class="help-toggle"><span class="arrow">▶</span> How this works</summary>
+  <div class="help-body">
+    <h3>Browsing your library</h3>
+    <p>This list comes directly from your beets database. Every file here has been through the full beets import pipeline: MusicBrainz-matched tags, embedded cover art, and ReplayGain normalization.</p>
+    <h3>Fixing wrong tags</h3>
+    <ul>
+      <li>Click <strong>Edit</strong> on any track to update its tags via <code>beet modify</code>.</li>
+      <li>For wrong album matches: use <code>beet import -L "album:Name"</code> in a terminal to re-import and pick a different candidate.</li>
+      <li>After editing tags externally: run <code>groove metadata rescan</code> to re-sync beets with what's on disk.</li>
+    </ul>
+  </div>
+</details>
+
+<div class="flex items-center justify-between mb-2">
+  <div>
+    <h1>Library</h1>
+    <p>{{ total_tracks }} tracks · {{ total_albums }} albums · {{ total_artists }} artists</p>
+  </div>
+  <form style="display:flex;gap:.5rem;align-items:center" method="get">
+    <input type="text" name="q" value="{{ query or '' }}" placeholder="Search artist, album, title…" style="width:260px">
+    <button type="submit" class="btn btn-secondary">Search</button>
+    {% if query %}<a href="/library" class="btn btn-secondary btn-sm">✕ Clear</a>{% endif %}
+  </form>
+</div>
+
+{% if items %}
+<div class="card" style="padding:0;overflow:hidden">
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Title</th>
+        <th>Artist</th>
+        <th>Album</th>
+        <th>Year</th>
+        <th>Genre</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for item in items %}
+      <tr>
+        <td class="text-muted mono">{{ item.get('track', '') }}</td>
+        <td><strong>{{ item.get('title', '?') }}</strong></td>
+        <td class="text-muted">{{ item.get('artist', '?') }}</td>
+        <td class="text-muted truncate" style="max-width:200px">{{ item.get('album', '?') }}</td>
+        <td class="text-muted mono">{{ item.get('year', '') }}</td>
+        <td class="text-muted" style="font-size:.8rem">{{ item.get('genre', '') }}</td>
+        <td>
+          <button class="btn btn-sm btn-secondary"
+            hx-get="/api/library/{{ item.get('id') }}/edit-form"
+            hx-target="#edit-modal-body"
+            hx-swap="innerHTML"
+            onclick="document.getElementById('edit-modal').style.display='flex'">
+            Edit
+          </button>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Pagination -->
+{% if total_pages > 1 %}
+<div class="flex gap-2 mt-2" style="justify-content:center">
+  {% if page > 1 %}<a href="?q={{ query or '' }}&page={{ page - 1 }}" class="btn btn-secondary btn-sm">← Prev</a>{% endif %}
+  <span class="text-muted" style="line-height:2">Page {{ page }} of {{ total_pages }}</span>
+  {% if page < total_pages %}<a href="?q={{ query or '' }}&page={{ page + 1 }}" class="btn btn-secondary btn-sm">Next →</a>{% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="empty-state">
+  <div class="icon">📚</div>
+  {% if query %}
+  <p>No results for "{{ query }}".</p>
+  <a href="/library" class="btn btn-secondary mt-2">Clear search</a>
+  {% else %}
+  <p>Library is empty. Add some music from the <a href="/">Queue</a>.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- Edit modal -->
+<div id="edit-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center">
+  <div class="card" style="width:480px;max-width:90vw">
+    <div class="card-header">
+      <h2>Edit Tags</h2>
+      <button onclick="document.getElementById('edit-modal').style.display='none'" class="btn btn-secondary btn-sm">✕</button>
+    </div>
+    <div id="edit-modal-body">Loading…</div>
+  </div>
+</div>
+
+{% endblock %}

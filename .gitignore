@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Runtime / generated
+*.log
+*.tmp
+
+# groove runtime config (contains real API keys — never commit)
+config/groove.toml
+groove.toml
+**/groove.toml
+!config/groove.toml.example
+
+# Local dev data (sibling folder when cloning the parent workspace)
+../groove-data/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.cache/
+.cache
+.coverage
+htmlcov/
+
+# IDE / editor
+.cursor/
+.vscode/
+.idea/
+
+# macOS
+.DS_Store

@@ -1,0 +1,49 @@
+# groove.toml – copy to your data root and fill in your values.
+#
+# Local workspace (default search path):  <Music>/groove-data/groove.toml
+# External drive (after `groove init`):   /Volumes/.../groove/groove.toml
+#
+# groove loads the first file that exists in this order:
+#   $GROOVE_CONFIG, ../groove-data/groove.toml, config/groove.toml (dev),
+#   /Volumes/Music/groove/groove.toml
+
+hdd_root = "/Volumes/Music/groove"
+
+[web]
+host = "127.0.0.1"
+port = 8765
+
+[audio]
+codec = "mp3"
+bitrate = "192"    # kbps; change to 320 if you prefer (larger files, same source quality)
+
+[discovery]
+billboard = true
+uk_top40 = true
+lastfm_global = true
+genres = ["rock", "hip-hop", "electronic"]   # Last.fm genre charts to scrape daily
+
+[auto_queue]
+min_chart_appearances = 2    # auto-queue tracks that appear on this many charts
+
+[api_keys]
+acoustid = ""          # https://acoustid.org/new-application  (free)
+lastfm_api_key = ""    # https://www.last.fm/api/account/create (free)
+lastfm_api_secret = "" # shown on the same page as your API key
+
+# Spotify API — needed for Tier 1 downloads (Spotify metadata → YouTube Music audio)
+# Create a free app at https://developer.spotify.com/dashboard
+# groove uses the Client Credentials flow (no user login, no redirect ever happens).
+# Spotify's form still requires a redirect URI — enter http://127.0.0.1 (loopback,
+# no port, satisfies their HTTPS/loopback rules). It will never be called.
+spotify_client_id = ""
+spotify_client_secret = ""
+
+# Deezer ARL — reserved for future Deezer download support
+# To get it: log into deezer.com → DevTools → Application → Cookies → copy "arl"
+deezer_arl = ""
+
+[worker]
+poll_interval_seconds = 5
+max_retries = 3
+min_free_space_gb = 5.0   # pause downloads when free space drops below this

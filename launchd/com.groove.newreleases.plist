@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Weekly new-releases check – runs Monday at 07:05.
+
+  Load:    launchctl load -w ~/Library/LaunchAgents/com.groove.newreleases.plist
+  Unload:  launchctl unload ~/Library/LaunchAgents/com.groove.newreleases.plist
+  Run now: launchctl start com.groove.newreleases
+  Logs:    tail -f /Volumes/Music/groove/logs/newreleases.log
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.groove.newreleases</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>-c</string>
+    <string>
+      export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin:$PATH";
+      cd "__GROOVE_REPO__";
+      exec uv run groove scrape new-releases
+    </string>
+  </array>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key>
+    <integer>1</integer>
+    <key>Hour</key>
+    <integer>7</integer>
+    <key>Minute</key>
+    <integer>5</integer>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/Volumes/Music/groove/logs/newreleases.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Volumes/Music/groove/logs/newreleases-error.log</string>
+</dict>
+</plist>

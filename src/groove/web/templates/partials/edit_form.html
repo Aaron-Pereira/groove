@@ -1,0 +1,29 @@
+<form hx-post="/api/library/{{ item_id }}/update-tags" hx-swap="none" hx-on::after-request="document.getElementById('edit-modal').style.display='none'">
+  <input type="hidden" name="item_id" value="{{ item_id }}">
+  <div class="form-group mb-1">
+    <label>Title</label>
+    <input type="text" name="title" value="{{ title }}">
+  </div>
+  <div class="form-group mb-1">
+    <label>Artist</label>
+    <input type="text" name="artist" value="{{ artist }}">
+  </div>
+  <div class="form-group mb-1">
+    <label>Album</label>
+    <input type="text" name="album" value="{{ album }}">
+  </div>
+  <div class="form-row">
+    <div class="form-group">
+      <label>Year</label>
+      <input type="text" name="year" value="{{ year }}">
+    </div>
+    <div class="form-group">
+      <label>Genre</label>
+      <input type="text" name="genre" value="{{ genre }}">
+    </div>
+  </div>
+  <div class="flex gap-2 mt-2">
+    <button type="submit" class="btn btn-primary">Save tags</button>
+    <button type="button" class="btn btn-secondary" onclick="document.getElementById('edit-modal').style.display='none'">Cancel</button>
+  </div>
+</form>
