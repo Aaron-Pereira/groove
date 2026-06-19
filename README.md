@@ -110,7 +110,7 @@ You'll paste these into `groove init` in the next step.
 ### 1.4 Clone and install groove
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/groove.git ~/groove
+git clone https://github.com/Aaron-Pereira/groove.git ~/groove
 cd ~/groove
 uv sync
 ```
