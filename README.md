@@ -41,6 +41,7 @@ Full setup (drive formatting, API keys, scheduled jobs) is in [One-time setup](#
 4. [Discovery & automation](#4-discovery--automation)
 5. [Troubleshooting](#5-troubleshooting)
 6. [Under the hood](#6-under-the-hood)
+7. [Moving to a new computer](#7-moving-to-a-new-computer)
 
 ---
 
@@ -591,4 +592,119 @@ it manually:
 
 ```bash
 uv run groove doctor --backup
+```
+
+---
+
+## 7. Moving to a new computer
+
+The **code** lives on GitHub. Your **music library, queue, and API keys** do
+**not** — they stay in a data folder (`groove-data/` or `/Volumes/Music/groove/`).
+Transfer both.
+
+### What to bring with you
+
+| Must copy | Why | Approx size |
+|-----------|-----|-------------|
+| `groove-data/` (or `/Volumes/Music/groove/`) | Library, beets DB, queue, watchlist, logs | ~library size (often 10+ GB) |
+| `groove-data/groove.toml` | API keys + paths (never commit this) | tiny |
+| GitHub access | Clone the app on the new Mac | — |
+
+| Leave behind | Why |
+|--------------|-----|
+| `groove/.venv/` | Recreate with `uv sync` |
+| `.pytest_cache/`, `.ruff_cache/` | Dev junk |
+
+### On the old computer (before you leave)
+
+1. Make sure code is pushed:
+   ```bash
+   cd /path/to/groove
+   git status          # should be clean / pushed
+   git push origin main
+   ```
+2. Copy the data folder to an external drive / cloud / AirDrop folder:
+   ```bash
+   # Example: sibling layout (Documents/Coding Project/Music/)
+   rsync -avh --progress \
+     "/Users/YOU/Documents/Coding Project/Music/groove-data/" \
+     "/Volumes/Backup/groove-data/"
+   ```
+3. Confirm these exist on the backup:
+   - `groove-data/groove.toml` (API keys)
+   - `groove-data/beets.yaml`
+   - `groove-data/library/`
+   - `groove-data/db/musiclib.db`
+   - `groove-data/state/` (queue, watchlist, discoveries)
+
+### On the new computer
+
+```bash
+# 1. Tools
+brew install python@3.12 ffmpeg chromaprint git
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source ~/.zshrc
+
+# 2. GitHub SSH (if you use SSH remotes)
+#    Settings → SSH and GPG keys → New SSH key
+#    Or clone with HTTPS instead.
+
+# 3. App
+git clone git@github.com:Aaron-Pereira/groove.git ~/groove
+# or: git clone https://github.com/Aaron-Pereira/groove.git ~/groove
+cd ~/groove
+uv sync
+
+# 4. Restore data next to the repo (recommended layout)
+mkdir -p ~/Documents/Coding\ Project/Music
+rsync -avh --progress /Volumes/Backup/groove-data/ \
+  ~/Documents/Coding\ Project/Music/groove-data/
+
+# 5. Point config at the restored folder
+# Edit groove-data/groove.toml → set hdd_root to the absolute path, e.g.:
+#   hdd_root = "/Users/YOU/Documents/Coding Project/Music/groove-data"
+#
+# Edit groove-data/beets.yaml paths to match:
+#   directory: .../groove-data/library
+#   library:   .../groove-data/db/musiclib.db
+#   import.log: .../groove-data/logs/beets-import.log
+
+# 6. Health check + start
+uv run groove doctor
+uv run groove serve   # http://127.0.0.1:8765
+```
+
+If you use an external drive named `Music` instead, put the data at
+`/Volumes/Music/groove/` and run `uv run groove init /Volumes/Music` only when
+starting fresh — for a restore, just copy the folder and fix paths as above.
+
+### Quick verify
+
+```bash
+uv run groove doctor
+uv run beet --config ../groove-data/beets.yaml stats
+```
+
+You should see your track count. Open http://127.0.0.1:8765 — library and queue
+should look familiar.
+
+### Optional: launchd again
+
+```bash
+uv run groove install-agents
+```
+
+### If you only have the music files (lost beets DB)
+
+Re-import from disk (tags are often still inside the MP3s):
+
+```bash
+uv run beet --config ../groove-data/beets.yaml import -A -C \
+  ../groove-data/library
+```
+
+Or re-match against MusicBrainz:
+
+```bash
+uv run groove metadata retag-albums --dry-run
 ```
