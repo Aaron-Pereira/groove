@@ -346,6 +346,29 @@ beet --config /Volumes/Music/groove/beets.yaml import -L "album:Name Of Album"
 
 This opens beets' interactive picker for just that album.
 
+### "Album has wrong track numbers / every file has the same name"
+
+Re-import the **album folder** against MusicBrainz (fingerprint match + rewrite tags/filenames). Run from the `groove/` project directory:
+
+```bash
+uv run beet --config ../groove-data/beets.yaml import -C -I \
+  "../groove-data/library/Artist Name/Album Name"
+```
+
+Example:
+
+```bash
+uv run beet --config ../groove-data/beets.yaml import -C -I \
+  "../groove-data/library/Marvin Gaye/Here, My Dear"
+```
+
+- `-C` – update files in place (don't move them)
+- `-I` – re-process even if already imported
+- Add `-t` to confirm matches interactively (`A` = apply, `M` = more candidates)
+- Add `--from-scratch` if every file was misnamed the same and tags need wiping first
+
+Or `cd` into the album folder and use `.` as the path. For many albums: `uv run groove metadata retag-albums`.
+
 ### "A track has wrong tags"
 
 Option A – use the Edit button in the web UI (`/library` → Edit on any track).

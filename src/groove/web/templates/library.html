@@ -7,11 +7,20 @@
   <div class="help-body">
     <h3>Browsing your library</h3>
     <p>This list comes directly from your beets database. Every file here has been through the full beets import pipeline: MusicBrainz-matched tags, embedded cover art, and ReplayGain normalization.</p>
-    <h3>Fixing wrong tags</h3>
+    <h3>Fixing wrong tags / track numbers</h3>
     <ul>
       <li>Click <strong>Edit</strong> on any track to update its tags via <code>beet modify</code>.</li>
-      <li>For wrong album matches: use <code>beet import -L "album:Name"</code> in a terminal to re-import and pick a different candidate.</li>
+      <li><strong>Fix a whole album</strong> (wrong numbers, every file named the same, bad titles) — from the <code>groove/</code> directory:
+        <pre style="background:var(--surface-2,#1a1a1a);padding:.75rem 1rem;border-radius:6px;overflow-x:auto;font-size:.85rem;line-height:1.45;margin:.5rem 0"><code>uv run beet --config ../groove-data/beets.yaml import -C -I \
+  "../groove-data/library/Artist Name/Album Name"</code></pre>
+        Example:
+        <pre style="background:var(--surface-2,#1a1a1a);padding:.75rem 1rem;border-radius:6px;overflow-x:auto;font-size:.85rem;line-height:1.45;margin:.5rem 0"><code>uv run beet --config ../groove-data/beets.yaml import -C -I \
+  "../groove-data/library/Marvin Gaye/Here, My Dear"</code></pre>
+        Flags: <code>-C</code> = in place, <code>-I</code> = re-process. Add <code>-t</code> to pick the match interactively (<kbd>A</kbd> = apply). Add <code>--from-scratch</code> if tags are completely wrong.
+      </li>
+      <li>For wrong album matches by query: <code>beet import -L "album:Name"</code> in a terminal.</li>
       <li>After editing tags externally: run <code>groove metadata rescan</code> to re-sync beets with what's on disk.</li>
+      <li>Many albums at once: <code>uv run groove metadata retag-albums</code>.</li>
     </ul>
   </div>
 </details>

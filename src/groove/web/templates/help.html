@@ -75,6 +75,24 @@
       <li>Click <strong>Edit</strong> on any track to update tags (calls <code>beet modify</code> under the hood).</li>
       <li>After editing tags in an external tool, run <code>groove metadata rescan</code> to re-sync beets.</li>
     </ul>
+    <h3>Fix album track numbers / re-tag one album</h3>
+    <p>When an album has wrong track numbers, wrong titles, or every file has the same name, re-import that album folder against MusicBrainz. Beets matches by audio fingerprint and rewrites tags + filenames.</p>
+    <p>From the <code>groove/</code> project directory:</p>
+    <pre style="background:var(--surface-2,#1a1a1a);padding:.75rem 1rem;border-radius:6px;overflow-x:auto;font-size:.85rem;line-height:1.45"><code>uv run beet --config ../groove-data/beets.yaml import -C -I \
+  "../groove-data/library/Artist Name/Album Name"</code></pre>
+    <p>Example:</p>
+    <pre style="background:var(--surface-2,#1a1a1a);padding:.75rem 1rem;border-radius:6px;overflow-x:auto;font-size:.85rem;line-height:1.45"><code>uv run beet --config ../groove-data/beets.yaml import -C -I \
+  "../groove-data/library/Marvin Gaye/Here, My Dear"</code></pre>
+    <ul>
+      <li><code>-C</code> – update files in place (don't move them).</li>
+      <li><code>-I</code> – re-process even if already imported.</li>
+      <li>Add <code>-t</code> to confirm matches interactively (press <kbd>A</kbd> to apply, <kbd>M</kbd> for more candidates).</li>
+      <li>Add <code>--from-scratch</code> if every file was misnamed the same way and you want tags wiped before matching.</li>
+    </ul>
+    <p>You can also <code>cd</code> into the album folder and use <code>.</code> as the path:</p>
+    <pre style="background:var(--surface-2,#1a1a1a);padding:.75rem 1rem;border-radius:6px;overflow-x:auto;font-size:.85rem;line-height:1.45"><code>cd "../groove-data/library/Marvin Gaye/Here, My Dear"
+uv run --directory "/path/to/groove" beet --config ../groove-data/beets.yaml import -C -I .</code></pre>
+    <p>For many albums at once: <code>uv run groove metadata retag-albums</code> (try <code>--dry-run</code> or <code>--artist "Name" --limit 1</code> first).</p>
   </div>
 </details>
 
@@ -91,8 +109,13 @@
     <h3>Common issues</h3>
     <ul>
       <li><strong>Download failed</strong> – click Retry in the queue, or supply a manual YouTube URL.</li>
-      <li><strong>Wrong album match</strong> – run <code>beet import -L "album:Name"</code> in a terminal.</li>
-      <li><strong>Wrong tags</strong> – use the Edit button, or <code>beet modify</code> on the CLI.</li>
+      <li><strong>Wrong album match</strong> – run <code>beet import -L "album:Name"</code> in a terminal, or re-import the folder (see Library → Fix album track numbers).</li>
+      <li><strong>Wrong tags / all files same name / bad track numbers</strong> –
+        <pre style="background:var(--surface-2,#1a1a1a);padding:.75rem 1rem;border-radius:6px;overflow-x:auto;font-size:.85rem;line-height:1.45;margin:.5rem 0"><code>uv run beet --config ../groove-data/beets.yaml import -C -I \
+  "../groove-data/library/Artist Name/Album Name"</code></pre>
+      </li>
+      <li><strong>Wrong tags on one track</strong> – use the Edit button, or <code>beet modify</code> on the CLI.</li>
+      <li><strong>Bulk “already in library” but files are bad</strong> – fix with the album import command above (don't re-queue the playlist). Or remove with <code>beet remove -d 'album:Name' 'artist:Artist'</code> then re-download.</li>
       <li><strong>Drive unplugged mid-download</strong> – worker pauses automatically; replug and it resumes.</li>
       <li><strong>Storage full</strong> – run <code>groove doctor</code> to see usage and get guidance.</li>
     </ul>

@@ -316,11 +316,13 @@ def _spotify_album_to_ytmusic(
     downloaded: list[Path] = []
     failed: list[str] = []
 
-    for sp_track in sp_tracks:
+    for idx, sp_track in enumerate(sp_tracks):
         track_title = sp_track.get("name", "")
         track_artists = ", ".join(a["name"] for a in sp_track.get("artists", []))
         duration_ms = sp_track.get("duration_ms")
         duration_s = int(duration_ms / 1000) if duration_ms else None
+        raw_num = sp_track.get("track_number")
+        track_number = int(raw_num) if raw_num is not None else idx + 1
 
         video_id = _ytmusic_find_video(
             ytmusic, track_artists or artist_name, track_title, duration_s,
@@ -335,6 +337,17 @@ def _spotify_album_to_ytmusic(
             url, dest_dir, codec, bitrate, is_playlist=False, backend="spotify_ytmusic",
         )
         if res.success:
+            for fp in res.files:
+                try:
+                    _tag_one_file(
+                        fp,
+                        artist=track_artists or artist_name,
+                        title=track_title,
+                        album=album_name,
+                        track_number=track_number,
+                    )
+                except Exception as exc:
+                    log.warning("Failed to tag %s: %s", fp, exc)
             downloaded.extend(res.files)
         else:
             log.warning("Download failed for '%s': %s", track_title, res.error)
@@ -721,24 +734,48 @@ def _ytmusic_album(
             continue
 
         album_display = album_result.get("title", search_q)
+        album_artists = album_data.get("artists") or album_result.get("artists") or []
+        album_artist = album_artists[0].get("name", "") if album_artists else (artist or "")
         log.info("YouTube Music: downloading album '%s' (%d tracks)", album_display, len(tracks))
 
         downloaded: list[Path] = []
         failed: list[str] = []
 
-        for track in tracks:
+        for idx, track in enumerate(tracks):
             video_id = track.get("videoId")
             if not video_id:
                 continue
+            track_title = track.get("title", "")
+            track_artists = track.get("artists") or []
+            track_artist = (
+                ", ".join(a["name"] for a in track_artists if a.get("name"))
+                or album_artist
+            )
+            raw_num = track.get("trackNumber") or track.get("index")
+            track_number = int(raw_num) if raw_num is not None else idx + 1
+
             url = f"https://music.youtube.com/watch?v={video_id}"
             res = _run_ytdlp(url, dest_dir, codec, bitrate, is_playlist=False, backend="ytmusic")
             if res.success:
+                for fp in res.files:
+                    try:
+                        _tag_one_file(
+                            fp,
+                            artist=track_artist,
+                            title=track_title,
+                            album=album_display,
+                            track_number=track_number,
+                        )
+                    except Exception as exc:
+                        log.warning("Failed to tag %s: %s", fp, exc)
                 downloaded.extend(res.files)
             else:
-                failed.append(track.get("title", video_id))
-                log.warning("Track download failed: %s — %s", track.get("title"), res.error)
+                failed.append(track_title or video_id)
+                log.warning("Track download failed: %s — %s", track_title, res.error)
 
         if downloaded:
+            if failed:
+                log.warning("Album download partial — failed tracks: %s", failed)
             return DownloadResult(
                 success=True, dest_dir=dest_dir, files=downloaded, backend="ytmusic",
             )
