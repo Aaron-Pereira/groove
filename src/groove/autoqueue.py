@@ -33,15 +33,23 @@ def run_autoqueue(stores: Stores, settings: Settings) -> int:
 
 
 def _queue_chart_appearances(stores: Stores, settings: Settings) -> int:
-    """Queue tracks that appeared on >= min_chart_appearances charts this week."""
+    """Queue tracks that appeared on >= min_chart_appearances charts this week.
+
+    With auto_queue.require_approval (default), eligible tracks are marked as
+    proposals instead — they appear in the "Awaiting approval" section of the
+    Discoveries page and are only downloaded once the user accepts them.
+    """
     min_appearances = settings.auto_queue.min_chart_appearances
     if min_appearances <= 0:
         return 0
 
+    require_approval = settings.auto_queue.require_approval
+
     week_ago = datetime.now(UTC) - timedelta(days=7)
     recent = [
         d for d in stores.discoveries.all()
-        if not d.auto_queued and not d.dismissed and d.seen_at >= week_ago
+        if not d.auto_queued and not d.dismissed and not d.proposed
+        and d.seen_at >= week_ago
     ]
 
     # Count how many distinct chart sources each (artist, title) appears on
@@ -65,6 +73,15 @@ def _queue_chart_appearances(stores: Stores, settings: Settings) -> int:
             disc = key_to_discovery[key]
             if key in pending_keys:
                 log.debug("Auto-queue skip (already pending): %s - %s", disc.artist, disc.title)
+                continue
+
+            if require_approval:
+                stores.discoveries.update_one(disc.id, {"proposed": True})
+                log.info(
+                    "Proposed for approval (appeared on %d charts): %s - %s",
+                    len(sources), disc.artist, disc.title,
+                )
+                added += 1
                 continue
 
             req = DownloadRequest(

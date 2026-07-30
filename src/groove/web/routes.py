@@ -286,12 +286,111 @@ async def discography_queue(
     return RedirectResponse("/", status_code=303)
 
 
+# ---------------------------------------------------------------------------
+# Random album by year
+# ---------------------------------------------------------------------------
+
+@router.get("/random-album", response_class=HTMLResponse)
+async def random_album_page(request: Request):
+    from groove.discovery.year_end import FIRST_BILLBOARD_YEAR, current_max_year
+
+    return _render(request, "random_album.html", {
+        "active_page": "random",
+        "min_year": FIRST_BILLBOARD_YEAR,
+        "max_year": current_max_year(),
+    })
+
+
+@router.post("/random-album/roll", response_class=HTMLResponse)
+async def random_album_roll(
+    request: Request,
+    year: int = Form(...),
+    exclude: str = Form(default=""),
+):
+    import random
+
+    from groove.discovery.year_end import (
+        FIRST_BILLBOARD_YEAR,
+        current_max_year,
+        fetch_year_albums,
+    )
+
+    settings = _settings(request)
+    stores = _stores(request)
+
+    ctx: dict = {
+        "active_page": "random",
+        "min_year": FIRST_BILLBOARD_YEAR,
+        "max_year": current_max_year(),
+        "year": year,
+    }
+
+    try:
+        albums = fetch_year_albums(year, settings.state_dir / "yearend")
+    except Exception as exc:
+        ctx["error"] = str(exc)
+        return _render(request, "random_album.html", ctx)
+
+    # Filter out albums already in the library, already queued, and the one
+    # just shown (so "Roll again" always changes the result).
+    library_keys = _beet_library_keys(settings)
+    pending_keys: set[str] = set()
+    for req in stores.requests.all():
+        if req.status not in ("done", "failed") and req.artist and req.album:
+            pending_keys.add(_norm(f"{req.artist} {req.album}"))
+
+    candidates = [
+        a for a in albums
+        if _norm(f"{a['artist']} {a['album']}") not in library_keys
+        and _norm(f"{a['artist']} {a['album']}") not in pending_keys
+        and _norm(f"{a['artist']} {a['album']}") != exclude
+    ]
+
+    if not candidates:
+        ctx["error"] = (
+            f"All {len(albums)} charted albums from {year} are already in your "
+            "library or queue. Try another year!"
+        )
+        return _render(request, "random_album.html", ctx)
+
+    pick = random.choice(candidates)
+    ctx["proposal"] = pick
+    ctx["exclude_key"] = _norm(f"{pick['artist']} {pick['album']}")
+    ctx["pool_size"] = len(candidates)
+    return _render(request, "random_album.html", ctx)
+
+
+@router.post("/random-album/accept")
+async def random_album_accept(
+    request: Request,
+    artist: str = Form(...),
+    album: str = Form(...),
+    year: int = Form(...),
+):
+    stores = _stores(request)
+    req = DownloadRequest(
+        raw_query=f"{artist} - {album}",
+        kind="album",
+        artist=artist,
+        album=album,
+        priority="normal",
+    )
+    stores.requests.append(req)
+    return RedirectResponse("/", status_code=303)
+
+
 @router.get("/discoveries", response_class=HTMLResponse)
 async def discoveries_page(request: Request, source: str = ""):
     stores = _stores(request)
     settings = _settings(request)
     all_disc = [d for d in stores.discoveries.all() if not d.dismissed]
     sources = sorted({d.source for d in all_disc})
+
+    # Chart hits that met the auto-download threshold and await user approval
+    proposed = [d for d in all_disc if d.proposed and not d.auto_queued]
+    proposed.sort(key=lambda d: (d.chart_rank or 999, d.seen_at))
+
+    all_disc = [d for d in all_disc if not d.proposed]
     if source:
         all_disc = [d for d in all_disc if d.source == source]
     all_disc.sort(key=lambda d: (d.chart_rank or 999, d.seen_at), reverse=False)
@@ -304,10 +403,12 @@ async def discoveries_page(request: Request, source: str = ""):
     return _render(request, "discoveries.html", {
         "active_page": "discoveries",
         "discoveries": all_disc,
+        "proposed": proposed,
         "sources": sources,
         "active_source": source,
         "last_run": last_run_str,
         "min_appearances": settings.auto_queue.min_chart_appearances,
+        "require_approval": settings.auto_queue.require_approval,
     })
 
 
@@ -432,16 +533,18 @@ async def api_queue_discovery(request: Request, disc_id: str):
     stores = _stores(request)
     disc = stores.discoveries.get(disc_id)
     if disc:
+        # Album discoveries (new releases, year rolls) must download as albums
+        kind = "album" if (disc.album and not disc.title) else "track"
         req = DownloadRequest(
             raw_query=f"{disc.artist} - {disc.title or disc.album or ''}",
-            kind="track",
+            kind=kind,
             artist=disc.artist,
             title=disc.title,
             album=disc.album,
             priority="normal",
         )
         stores.requests.append(req)
-        stores.discoveries.update_one(disc_id, {"auto_queued": True})
+        stores.discoveries.update_one(disc_id, {"auto_queued": True, "proposed": False})
     return _disc_row_removed(disc_id)
 
 
@@ -735,6 +838,8 @@ def _run_scrape(settings, stores) -> None:
     scrapers = []
     if settings.discovery.billboard:
         scrapers.append(lambda: billboard.scrape())
+    if settings.discovery.billboard_200:
+        scrapers.append(lambda: billboard.scrape_billboard_200())
     if settings.discovery.uk_top40:
         scrapers.append(lambda: uk_top40.scrape())
     if settings.discovery.lastfm_global and settings.api_keys.lastfm_api_key:
@@ -780,12 +885,14 @@ def _merge_discoveries(stores, new_items) -> None:
         result: dict[tuple[str, str], tuple[str, int]] = {}
         for d in stores.discoveries.all():
             if d.seen_at.date() == today and not d.dismissed:
-                k = (_norm(d.artist), _norm(d.title or ""))
+                # Album-only discoveries key on the album name so two albums
+                # by the same artist don't collide.
+                k = (_norm(d.artist), _norm(d.title or d.album or ""))
                 result[k] = (d.id, d.appearances)
         return result
 
     for item in new_items:
-        key = (_norm(item.artist), _norm(item.title or ""))
+        key = (_norm(item.artist), _norm(item.title or item.album or ""))
         today_map = _build_today_map()
         if key in today_map:
             disc_id, current_appearances = today_map[key]

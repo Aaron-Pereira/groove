@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Random Album – groove{% endblock %}
+{% block content %}
+
+<details class="help-panel">
+  <summary class="help-toggle"><span class="arrow">▶</span> How this works</summary>
+  <div class="help-body">
+    <h3>Random album by year</h3>
+    <ul>
+      <li>Pick a year and groove rolls a random album from <strong>Billboard's Year-End Top 200 Albums</strong> chart for that year (MusicBrainz is used for years Billboard doesn't cover).</li>
+      <li>Albums already in your library or download queue are excluded automatically.</li>
+      <li>Nothing is downloaded until you hit <strong>Accept &amp; download</strong> — roll again as many times as you like.</li>
+      <li>Accepted albums are downloaded from YouTube Music as a full album and filed under Artist/Album (Year).</li>
+    </ul>
+  </div>
+</details>
+
+<h1>Random Album</h1>
+<p>Feeling lucky? Get a random top album from any year since {{ min_year }}.</p>
+
+{% if error %}
+<div class="flash flash-error">{{ error }}</div>
+{% endif %}
+
+<div class="card" style="max-width:480px">
+  <form method="post" action="/random-album/roll">
+    <div class="form-group" style="margin-bottom:.75rem">
+      <label>Year ({{ min_year }}–{{ max_year }})</label>
+      <input type="number" name="year" min="{{ min_year }}" max="{{ max_year }}"
+             value="{{ year or max_year }}" required style="max-width:140px">
+    </div>
+    <button type="submit" class="btn btn-primary">🎲 Roll an album</button>
+  </form>
+</div>
+
+{% if proposal %}
+<div class="card" style="max-width:480px;margin-top:1rem;border:1px solid var(--accent,#7c5cfc)">
+  <div class="text-muted" style="font-size:.8rem;text-transform:uppercase;letter-spacing:.05em">
+    Your {{ year }} pick
+  </div>
+  <h2 style="margin:.35rem 0 .15rem">{{ proposal.album }}</h2>
+  <p style="margin:0 0 .5rem;font-size:1.05rem">{{ proposal.artist }}</p>
+  <p class="text-muted" style="font-size:.85rem;margin-bottom:1rem">
+    {% if proposal.source == 'billboard_yearend' and proposal.rank %}
+      #{{ proposal.rank }} on Billboard's {{ year }} year-end album chart
+    {% elif proposal.source == 'billboard_yearend' %}
+      From Billboard's {{ year }} year-end album chart
+    {% else %}
+      Released {{ year }} (via MusicBrainz)
+    {% endif %}
+    · {{ pool_size }} albums left in the {{ year }} pool
+  </p>
+  <div class="flex gap-2">
+    <form method="post" action="/random-album/accept">
+      <input type="hidden" name="artist" value="{{ proposal.artist }}">
+      <input type="hidden" name="album" value="{{ proposal.album }}">
+      <input type="hidden" name="year" value="{{ year }}">
+      <button type="submit" class="btn btn-primary">Accept &amp; download</button>
+    </form>
+    <form method="post" action="/random-album/roll">
+      <input type="hidden" name="year" value="{{ year }}">
+      <input type="hidden" name="exclude" value="{{ exclude_key }}">
+      <button type="submit" class="btn btn-secondary">Roll again</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

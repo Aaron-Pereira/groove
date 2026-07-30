@@ -555,6 +555,7 @@ def _download_ytmusic_playlist_url(
 
     album_name = playlist_data.get("title") or ""
     album_artist = ""
+    album_year = str(playlist_data["year"]) if playlist_data.get("year") else ""
     if playlist_data.get("author"):
         album_artist = playlist_data["author"].get("name", "")
 
@@ -578,6 +579,8 @@ def _download_ytmusic_playlist_url(
                     artists = album_data.get("artists") or []
                     if artists:
                         album_artist = artists[0].get("name", "")
+                if not album_year and album_data.get("year"):
+                    album_year = str(album_data["year"])
             except Exception as exc:
                 log.debug("get_album failed for browse_id %s: %s", album_info["id"], exc)
 
@@ -629,6 +632,8 @@ def _download_ytmusic_playlist_url(
                 title=meta["title"],
                 album=meta["album"],
                 track_number=meta["track_number"],
+                albumartist=album_artist or None,
+                year=album_year or None,
             )
         except Exception as exc:
             log.warning("Failed to tag %s: %s", meta["file"], exc)
@@ -736,6 +741,7 @@ def _ytmusic_album(
         album_display = album_result.get("title", search_q)
         album_artists = album_data.get("artists") or album_result.get("artists") or []
         album_artist = album_artists[0].get("name", "") if album_artists else (artist or "")
+        album_year = str(album_data["year"]) if album_data.get("year") else ""
         log.info("YouTube Music: downloading album '%s' (%d tracks)", album_display, len(tracks))
 
         downloaded: list[Path] = []
@@ -765,6 +771,8 @@ def _ytmusic_album(
                             title=track_title,
                             album=album_display,
                             track_number=track_number,
+                            albumartist=album_artist or None,
+                            year=album_year or None,
                         )
                     except Exception as exc:
                         log.warning("Failed to tag %s: %s", fp, exc)
@@ -909,7 +917,16 @@ def _run_ytdlp(
     is_playlist: bool = False,
     backend: str = "youtube",
 ) -> DownloadResult:
-    """Run a single yt-dlp extract-audio invocation."""
+    """Run a single yt-dlp extract-audio invocation.
+
+    Returns only the file(s) produced by THIS invocation, not everything in
+    dest_dir — album downloads run this once per track into a shared folder,
+    and returning pre-existing files caused every track's metadata to be
+    re-applied to earlier files (albums ended up tagged as the last track).
+    """
+    preexisting: set[Path] = (
+        {p for p in dest_dir.iterdir() if p.is_file()} if dest_dir.exists() else set()
+    )
     output_template = str(dest_dir / "%(title)s.%(ext)s")
     cmd = [
         _find_ytdlp(),
@@ -922,6 +939,10 @@ def _run_ytdlp(
         "--no-playlist" if not is_playlist else "--yes-playlist",
         "--socket-timeout", "30",
         "--retries", "3",
+        # Print each final file path so we can identify this run's output even
+        # when the file already existed (e.g. worker retry of the same request).
+        "--no-simulate",
+        "--print", "after_move:filepath",
         source,
     ]
 
@@ -952,11 +973,23 @@ def _run_ytdlp(
             error=_clean_error(result.stderr),
         )
 
-    files = list(dest_dir.glob(f"*.{codec}"))
+    audio_exts = ("mp3", "m4a", "ogg", "opus", "flac")
+
+    # Preferred: paths printed by --print after_move:filepath (exactly this
+    # run's output, even if the file already existed from a previous attempt).
+    files = []
+    for line in result.stdout.splitlines():
+        p = Path(line.strip())
+        if line.strip() and p.is_file() and p.suffix.lstrip(".").lower() in audio_exts:
+            files.append(p)
+
+    # Fallback: new audio files that appeared in dest_dir during this run.
     if not files:
         files = [
             p for p in dest_dir.iterdir()
-            if p.is_file() and p.suffix.lstrip(".") in ("mp3", "m4a", "ogg", "opus", "flac")
+            if p.is_file()
+            and p not in preexisting
+            and p.suffix.lstrip(".").lower() in audio_exts
         ]
 
     if not files:
@@ -1052,13 +1085,15 @@ def tag_downloaded_files(
     title: str | None = None,
     album: str | None = None,
     track_number: int | None = None,
+    albumartist: str | None = None,
+    year: str | None = None,
 ) -> int:
     """Write metadata tags to downloaded audio files using mutagen.
 
     Only overwrites fields for which a non-None value is supplied.
     Returns the number of files successfully tagged.
     """
-    if not any((artist, title, album, track_number is not None)):
+    if not any((artist, title, album, albumartist, year, track_number is not None)):
         return 0
 
     try:
@@ -1074,7 +1109,7 @@ def tag_downloaded_files(
         try:
             tagged += _tag_one_file(
                 fp, artist=artist, title=title, album=album,
-                track_number=track_number,
+                track_number=track_number, albumartist=albumartist, year=year,
             )
         except Exception as exc:
             log.warning("Failed to tag %s: %s", fp, exc)
@@ -1088,6 +1123,8 @@ def _tag_one_file(
     title: str | None,
     album: str | None,
     track_number: int | None,
+    albumartist: str | None = None,
+    year: str | None = None,
 ) -> int:
     """Tag a single audio file. Returns 1 on success, 0 on skip/error."""
     import mutagen
@@ -1111,6 +1148,10 @@ def _tag_one_file(
             tags["title"] = title
         if album:
             tags["album"] = album
+        if albumartist:
+            tags["albumartist"] = albumartist
+        if year:
+            tags["date"] = year
         if track_number is not None:
             tags["tracknumber"] = str(track_number)
         tags.save()
@@ -1127,6 +1168,10 @@ def _tag_one_file(
             audio.tags["\xa9nam"] = [title]
         if album:
             audio.tags["\xa9alb"] = [album]
+        if albumartist:
+            audio.tags["aART"] = [albumartist]
+        if year:
+            audio.tags["\xa9day"] = [year]
         if track_number is not None:
             audio.tags["trkn"] = [(track_number, 0)]
         audio.save()
@@ -1142,6 +1187,10 @@ def _tag_one_file(
             audio["title"] = [title]
         if album:
             audio["album"] = [album]
+        if albumartist:
+            audio["albumartist"] = [albumartist]
+        if year:
+            audio["date"] = [year]
         if track_number is not None:
             audio["tracknumber"] = [str(track_number)]
         audio.save()
@@ -1156,6 +1205,10 @@ def _tag_one_file(
             audio["title"] = [title]
         if album:
             audio["album"] = [album]
+        if albumartist:
+            audio["albumartist"] = [albumartist]
+        if year:
+            audio["date"] = [year]
         if track_number is not None:
             audio["tracknumber"] = [str(track_number)]
         audio.save()

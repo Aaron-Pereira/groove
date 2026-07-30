@@ -84,6 +84,7 @@ def import_directory(
     skip_autotag: bool = False,
     request_id: str | None = None,
     import_log: JsonStore | None = None,
+    as_album: bool = False,
 ) -> ImportResult:
     """
     Run `beet import` on a directory.
@@ -94,6 +95,9 @@ def import_directory(
     - `timid=True`: adds -t flag (for CD ingest).
     - `skip_autotag=True`: import as-is without MusicBrainz matching (-A).
       Use when metadata is already trusted (e.g. from YouTube Music).
+    - `as_album=True`: never use singleton mode, even for one file — the
+      request is an album, so a lone track must still be filed under
+      Artist/Album rather than Non-Album/ (e.g. partial album download).
     """
     beet_config = settings.beets_config
     beet_exe = _find_beet()
@@ -125,7 +129,10 @@ def import_directory(
 
     # Single-track downloads (any source): use singleton mode so beets doesn't
     # cluster a lone track with other singles into a phantom "album".
-    if source_kind != "cd" and _count_audio_files(directory) <= 1:
+    use_singleton = (
+        not as_album and source_kind != "cd" and _count_audio_files(directory) <= 1
+    )
+    if use_singleton:
         cmd.append("-s")  # singleton: import as individual track
 
     cmd.append(str(directory))
@@ -190,7 +197,7 @@ def import_directory(
                 "-m",
                 "--quiet-fallback=asis",
             ]
-            if source_kind != "cd" and _count_audio_files(directory) <= 1:
+            if not as_album and source_kind != "cd" and _count_audio_files(directory) <= 1:
                 retry_cmd.append("-s")
             retry_cmd.append(str(directory))
             retry_proc, retry_error = _run_beet(retry_cmd, env=env)

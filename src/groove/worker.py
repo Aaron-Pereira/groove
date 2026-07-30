@@ -128,14 +128,25 @@ class Worker:
             if result.files and not trust_source_metadata:
                 strip_track_numbers(result.files)
 
-            if result.files and any((request.artist, request.title, request.album,
-                                     request.track_number is not None)):
+            # Multi-track downloads from trusted backends were already tagged
+            # per-track by the downloader (title/track number differ per file);
+            # overwriting them with request-level fields would stamp the same
+            # title/number on every track of the album.
+            already_tagged_per_track = trust_source_metadata and len(result.files) > 1
+
+            if (
+                result.files
+                and not already_tagged_per_track
+                and any((request.artist, request.title, request.album,
+                         request.track_number is not None))
+            ):
                 n = tag_downloaded_files(
                     result.files,
                     artist=request.artist,
                     title=request.title,
                     album=request.album,
                     track_number=request.track_number,
+                    albumartist=request.artist if request.kind == "album" else None,
                 )
                 log.info("Tagged %d/%d file(s) with request metadata", n, len(result.files))
 
@@ -146,6 +157,7 @@ class Worker:
                 skip_autotag=trust_source_metadata,
                 request_id=request.id,
                 import_log=self.stores.import_log,
+                as_album=(request.kind == "album"),
             )
             if not import_result.success and not import_result.imported:
                 raise RuntimeError(import_result.error or "beet import failed")

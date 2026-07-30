@@ -25,6 +25,7 @@ class AudioConfig(BaseModel):
 
 class DiscoveryConfig(BaseModel):
     billboard: bool = True
+    billboard_200: bool = True  # Billboard 200 albums chart
     uk_top40: bool = True
     lastfm_global: bool = True
     genres: list[str] = ["rock", "hip-hop", "electronic"]
@@ -32,6 +33,10 @@ class DiscoveryConfig(BaseModel):
 
 class AutoQueueConfig(BaseModel):
     min_chart_appearances: int = 2
+    # When True, chart hits that meet the threshold become proposals on the
+    # Discoveries page (user must accept before download) instead of being
+    # queued automatically.
+    require_approval: bool = True
 
 
 class ApiKeysConfig(BaseModel):

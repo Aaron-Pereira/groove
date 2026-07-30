@@ -7,11 +7,15 @@
   <div class="help-body">
     <h3>Where discoveries come from</h3>
     <ul>
-      <li>Daily: Billboard Hot 100, UK Official Top 40, Last.fm global chart, and your configured genre charts.</li>
+      <li>Daily: Billboard Hot 100, Billboard 200 albums, UK Official Top 40, Last.fm global chart, and your configured genre charts. Queueing a Billboard 200 entry downloads the whole album.</li>
       <li>Weekly: New releases on MusicBrainz for artists in your <a href="/watchlist">Watchlist</a>.</li>
     </ul>
     <h3>Auto-queue rules</h3>
+    {% if require_approval %}
+    <p>Tracks that appear on <strong>{{ min_appearances }}</strong> or more charts this week are proposed for download in the <strong>Awaiting your approval</strong> section — nothing downloads until you accept it. Adjust <code>auto_queue.min_chart_appearances</code> in <code>groove.toml</code>, or set <code>auto_queue.require_approval = false</code> to download without asking.</p>
+    {% else %}
     <p>Tracks that appear on <strong>{{ min_appearances }}</strong> or more charts this week are automatically queued at low priority. Adjust <code>auto_queue.min_chart_appearances</code> in <code>groove.toml</code>.</p>
+    {% endif %}
     <h3>Actions</h3>
     <ul>
       <li><strong>Add to queue</strong> – sends the track to the download queue at normal priority.</li>
@@ -32,6 +36,36 @@
     </button>
   </form>
 </div>
+
+{% if proposed %}
+<div class="card" style="border:1px solid var(--accent,#7c5cfc);margin-bottom:1rem">
+  <h2 style="margin-bottom:.25rem">Awaiting your approval</h2>
+  <p class="text-muted" style="margin-bottom:.75rem">
+    These hit {{ min_appearances }}+ charts this week and qualify for auto-download.
+    Accept to queue, or dismiss.
+  </p>
+  <table>
+    <tbody>
+    {% for d in proposed %}
+      <tr id="disc-{{ d.id }}">
+        <td class="text-muted mono">{{ d.chart_rank or '—' }}</td>
+        <td>{{ d.artist }}</td>
+        <td>{{ d.title or d.album or '—' }}</td>
+        <td><span class="badge badge-searching">{{ d.source.replace('_', ' ') }}</span></td>
+        <td>
+          <form hx-post="/api/discovery/{{ d.id }}/queue" hx-target="#disc-{{ d.id }}" hx-swap="outerHTML" style="display:inline">
+            <button class="btn btn-sm btn-primary">✓ Accept</button>
+          </form>
+          <form hx-delete="/api/discovery/{{ d.id }}" hx-target="#disc-{{ d.id }}" hx-swap="outerHTML" style="display:inline">
+            <button class="btn btn-sm btn-secondary">Dismiss</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
 
 <!-- Filter tabs -->
 <div class="flex gap-2 mb-2" style="flex-wrap:wrap">

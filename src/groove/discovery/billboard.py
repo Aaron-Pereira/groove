@@ -1,7 +1,10 @@
 """
-Billboard Hot 100 scraper.
+Billboard chart scrapers.
 
-Scrapes https://www.billboard.com/charts/hot-100/ using httpx + BeautifulSoup.
+- Hot 100 (tracks):    https://www.billboard.com/charts/hot-100/
+- Billboard 200 (albums): https://www.billboard.com/charts/billboard-200/
+
+Both pages share the same markup, scraped with httpx + BeautifulSoup.
 """
 
 from __future__ import annotations
@@ -18,6 +21,7 @@ from groove.store import ChartRun, Discovery
 log = logging.getLogger(__name__)
 
 CHART_URL = "https://www.billboard.com/charts/hot-100/"
+ALBUM_CHART_URL = "https://www.billboard.com/charts/billboard-200/"
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -73,7 +77,52 @@ def scrape(client: httpx.Client | None = None) -> tuple[list[Discovery], ChartRu
     return discoveries, run
 
 
-def _parse(html: str) -> list[tuple[int, str, str]]:
+def scrape_billboard_200(client: httpx.Client | None = None) -> tuple[list[Discovery], ChartRun]:
+    """
+    Scrape the Billboard 200 albums chart.
+
+    Same page structure as the Hot 100; entries become album discoveries
+    (album set, title empty) so queueing them downloads the full album.
+    """
+    run_at = datetime.now(UTC)
+    errors: list[str] = []
+    discoveries: list[Discovery] = []
+
+    _owned_client = client is None
+    try:
+        if _owned_client:
+            client = httpx.Client(headers=HEADERS, follow_redirects=True, timeout=30)
+        resp = client.get(ALBUM_CHART_URL)
+        resp.raise_for_status()
+        entries = _parse(resp.text, cap=200)
+    except Exception as exc:
+        log.exception("Billboard 200 scrape failed: %s", exc)
+        errors.append(str(exc))
+        entries = []
+    finally:
+        if _owned_client and client is not None:
+            client.close()
+
+    for rank, artist, album in entries:
+        discoveries.append(Discovery(
+            source="billboard_200",
+            chart_rank=rank,
+            artist=artist,
+            album=album,
+            seen_at=run_at,
+        ))
+
+    run = ChartRun(
+        source="billboard_200",
+        run_at=run_at,
+        items_found=len(discoveries),
+        errors=errors,
+    )
+    log.info("Billboard 200: %d entries, %d errors", len(discoveries), len(errors))
+    return discoveries, run
+
+
+def _parse(html: str, cap: int = 100) -> list[tuple[int, str, str]]:
     """Return list of (rank, artist, title) tuples."""
     soup = BeautifulSoup(html, "html.parser")
     results: list[tuple[int, str, str]] = []
@@ -115,7 +164,7 @@ def _parse(html: str) -> list[tuple[int, str, str]]:
         # Last-resort: look for JSON-LD embedded in the page
         results = _parse_jsonld(soup)
 
-    return results[:100]  # cap at 100
+    return results[:cap]
 
 
 def _parse_jsonld(soup: BeautifulSoup) -> list[tuple[int, str, str]]:

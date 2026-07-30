@@ -198,7 +198,8 @@ def _parse_plain_text(text: str) -> ParseResult:
         if not line or line.startswith("#"):
             continue
         if _is_url(line):
-            entries.append(ParsedEntry(raw_query=line, source_url=line, kind="track", source_format="plain_text"))
+            kind = "album" if _is_ytmusic_album_url(line) else "track"
+            entries.append(ParsedEntry(raw_query=line, source_url=line, kind=kind, source_format="plain_text"))
         else:
             entry = _parse_text_line(line)
             entries.append(entry)
@@ -312,10 +313,14 @@ def _parse_generic_csv(text: str) -> ParseResult:
 def _parse_youtube_playlist(url: str) -> ParseResult:
     """Parse a YouTube/YouTube Music playlist.
 
-    Tries ytmusicapi first (rich metadata: artist, album, track number),
-    falling back to yt-dlp --flat-playlist when ytmusicapi is unavailable
-    or the playlist is a regular YouTube playlist without music metadata.
+    YouTube Music *album* playlists (OLAK5uy_…) become a single kind="album"
+    entry so the whole album is downloaded and imported together.  Other
+    playlists are expanded into individual tracks — via ytmusicapi first
+    (rich metadata), falling back to yt-dlp --flat-playlist.
     """
+    if _is_ytmusic_album_url(url):
+        return _parse_ytmusic_album(url)
+
     if _is_ytmusic_url(url):
         result = _parse_ytmusic_playlist(url)
         if result.entries:
@@ -327,6 +332,77 @@ def _parse_youtube_playlist(url: str) -> ParseResult:
 
 def _is_ytmusic_url(url: str) -> bool:
     return "music.youtube.com" in url
+
+
+def _is_ytmusic_album_url(url: str) -> bool:
+    """True for YouTube Music album share URLs (playlist ID OLAK5uy_…)."""
+    if not _is_url(url) or not _is_ytmusic_url(url):
+        return False
+    playlist_id = _extract_playlist_id(url) or ""
+    return playlist_id.startswith("OLAK5uy_")
+
+
+def _parse_ytmusic_album(url: str) -> ParseResult:
+    """Return a single kind="album" entry for a YouTube Music album URL.
+
+    The downloader handles these URLs natively (fetching every track with
+    correct album metadata), so we must NOT expand them into per-track
+    requests — that would import each song as a singleton under Non-Album/.
+    Artist/album names are fetched here only for the preview and dedup check;
+    if the lookup fails the entry is still queued with just the URL.
+    """
+    artist: str | None = None
+    album: str | None = None
+    year: str | None = None
+    errors: list[str] = []
+
+    try:
+        from ytmusicapi import YTMusic
+        ytmusic = YTMusic()
+        playlist_id = _extract_playlist_id(url)
+        playlist_data = ytmusic.get_playlist(playlist_id, limit=1)
+        album = playlist_data.get("title") or None
+        author = playlist_data.get("author") or {}
+        artist = author.get("name") or None
+        year = str(playlist_data["year"]) if playlist_data.get("year") else None
+
+        # Album playlists often omit author/year — fall back to the first
+        # track's artist and the album page.
+        tracks = playlist_data.get("tracks") or []
+        if not artist and tracks:
+            track_artists = tracks[0].get("artists") or []
+            if track_artists:
+                artist = track_artists[0].get("name") or None
+        if (not artist or not year) and tracks:
+            album_info = tracks[0].get("album") or {}
+            if album_info.get("id"):
+                album_data = ytmusic.get_album(album_info["id"])
+                if not artist:
+                    album_artists = album_data.get("artists") or []
+                    if album_artists:
+                        artist = album_artists[0].get("name") or None
+                if not year and album_data.get("year"):
+                    year = str(album_data["year"])
+    except Exception as exc:
+        log.warning("Could not fetch album metadata for %s: %s", url, exc)
+        errors.append(f"Album metadata lookup failed (queued by URL only): {exc}")
+
+    raw = f"{artist} - {album}" if artist and album else url
+    entry = ParsedEntry(
+        raw_query=raw,
+        kind="album",
+        artist=artist,
+        album=album,
+        year=year,
+        source_url=url,
+        source_format="youtube_playlist",
+    )
+    return ParseResult(
+        entries=[entry],
+        format_detected="youtube_playlist",
+        raw_line_count=1,
+        errors=errors,
+    )
 
 
 def _extract_playlist_id(url: str) -> str | None:

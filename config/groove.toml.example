@@ -21,10 +21,13 @@ bitrate = "192"    # kbps; change to 320 if you prefer (larger files, same sourc
 billboard = true
 uk_top40 = true
 lastfm_global = true
+billboard_200 = true         # Billboard 200 albums chart (full-album discoveries)
 genres = ["rock", "hip-hop", "electronic"]   # Last.fm genre charts to scrape daily
 
 [auto_queue]
 min_chart_appearances = 2    # auto-queue tracks that appear on this many charts
+require_approval = true      # true: chart hits become proposals you accept on the
+                             # Discoveries page; false: download without asking
 
 [api_keys]
 acoustid = ""          # https://acoustid.org/new-application  (free)

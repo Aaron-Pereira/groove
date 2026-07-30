@@ -83,6 +83,9 @@ class Discovery(BaseModel):
     seen_at: datetime = Field(default_factory=utcnow)
     auto_queued: bool = False
     dismissed: bool = False
+    # Set by auto-queue when require_approval is on: the item met the
+    # auto-download threshold and awaits user accept/dismiss.
+    proposed: bool = False
     appearances: int = 1  # how many chart runs have seen this entry
 
 
