@@ -1,114 +1,490 @@
 # groove
 
-**Self-hosted music library manager for macOS** — download, tag, organize, and discover music on your own drive.
+**Self-hosted music library for macOS** — search for songs or albums, download them, tag them automatically, and browse everything in a simple web page on your Mac.
 
 | | |
 |---|---|
-| **Download** | YouTube search, direct URLs, playlists, full artist discographies |
-| **Tag & organize** | MusicBrainz metadata via [beets](https://beets.io/) — cover art, genres, ReplayGain, lyrics |
-| **Discover** | Billboard Hot 100, UK Top 40, Last.fm charts; auto-queue tracks trending across charts |
-| **Migrate** | Import your Spotify library from an Exportify CSV in one upload |
-| **Web UI** | Local dashboard at `http://localhost:8765` — queue, library browser, watchlist |
-| **Automation** | Background worker + optional launchd jobs for scraping and metadata refresh |
+| **Download** | YouTube / YouTube Music search, direct links, playlists, full artist discographies |
+| **Tag & organize** | Automatic metadata via [beets](https://beets.io/) — cover art, genres, track numbers |
+| **Discover** | Billboard, UK Top 40, Last.fm charts; random album by year; chart suggestions you can approve |
+| **Web UI** | Local dashboard at **http://localhost:8765** — queue, library, discoveries |
+| **Runs in the background** | Optional auto-start on login |
 
-**Stack:** Python 3.12 · FastAPI · beets · yt-dlp · Typer · Rich
+**Stack:** Python 3.12 · FastAPI · beets · yt-dlp · Typer
 
-Your external drive is the single source of truth. Everything lives in
-`/Volumes/Music/groove/` so no pre-existing files on the drive are touched.
+---
 
-### Quick start
+## Who should read what
+
+| You are… | Start here |
+|----------|------------|
+| **Using groove on your Mac** (download music, open the web UI, get updates) | [First-time setup](#for-users-first-time-setup-on-your-mac) below |
+| **Changing the code** (Aaron / developers) | [For developers](#for-developers) at the bottom |
+
+---
+
+## For users: first-time setup on your Mac
+
+**Time needed:** about 20–30 minutes the first time.  
+**You do not need to know how to code.** You will copy and paste commands into the **Terminal** app.
+
+### Two folders — keep this in mind
+
+groove uses **two separate places** on your Mac:
+
+| Folder | What it is | You touch it? |
+|--------|------------|---------------|
+| `~/groove` | The **app** (downloaded from GitHub) | **No** — only run the update commands below |
+| Your **music data** folder (see step 6) | Your library, queue, settings, API keys | **No** — groove manages this; use the web UI instead |
+
+Your music files, queue, and settings live in the **data** folder — not inside `~/groove`.
+
+---
+
+### Before you begin
+
+You will need:
+
+- A Mac running a recent version of macOS
+- An internet connection
+- About 30 minutes
+- A **USB drive** (recommended, 64 GB or larger) **or** free space on your Mac's internal disk
+- Two free website accounts for API keys (step 7) — AcoustID and Last.fm
+
+---
+
+### Step 1 — Open Terminal
+
+1. Press **⌘ Space** (Command + Space)
+2. Type **Terminal**
+3. Press **Enter**
+
+A window with a command prompt appears. You will paste commands here and press **Enter** after each one.
+
+---
+
+### Step 2 — Install Homebrew (if you don't have it)
+
+Homebrew installs the tools groove needs. Paste this line and press Enter:
 
 ```bash
-brew install python@3.12 ffmpeg chromaprint
-curl -LsSf https://astral.sh/uv/install.sh | sh
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
 
+Follow the on-screen instructions. When it finishes, it may ask you to run two extra lines — copy those from the Terminal output and run them.
+
+**Check it worked:**
+
+```bash
+brew --version
+```
+
+You should see something like `Homebrew 4.x.x`.
+
+---
+
+### Step 3 — Install required tools
+
+Paste this whole block and press Enter (it may take a few minutes):
+
+```bash
+brew install python@3.12 ffmpeg chromaprint deno git
+```
+
+| Tool | Why |
+|------|-----|
+| `python` | Runs groove |
+| `ffmpeg` | Converts audio to MP3 |
+| `chromaprint` | Helps identify songs by sound |
+| `deno` | **Required** for YouTube downloads to work |
+| `git` | Downloads and updates groove from GitHub |
+
+**Check it worked:**
+
+```bash
+python3.12 --version
+deno --version
+ffmpeg -version | head -1
+```
+
+---
+
+### Step 4 — Install `uv` (Python package manager)
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Then reload your shell (or close Terminal and open it again):
+
+```bash
+source ~/.zshrc
+```
+
+**Check it worked:**
+
+```bash
+uv --version
+```
+
+---
+
+### Step 5 — Download groove from GitHub
+
+```bash
 git clone https://github.com/Aaron-Pereira/groove.git ~/groove
 cd ~/groove
 uv sync
-uv run groove init /Volumes/Music    # creates layout, prompts for free API keys
-uv run groove serve                  # open http://localhost:8765
 ```
 
-Full setup (drive formatting, API keys, scheduled jobs) is in [One-time setup](#1-one-time-setup) below.
+This creates `~/groove` on your Mac and installs everything groove needs.  
+**Do not edit any files inside `~/groove`.**
+
+**Check it worked:**
+
+```bash
+cd ~/groove
+uv run groove --help
+```
+
+You should see a list of groove commands.
 
 ---
 
-## Table of contents
+### Step 6 — Choose where your music library lives
 
-1. [One-time setup](#1-one-time-setup)
-2. [Day-to-day usage](#2-day-to-day-usage)
+Pick **one** option:
+
+#### Option A — USB drive (recommended)
+
+1. Plug in a USB drive.
+2. In **Disk Utility**, format it as **ExFAT** and name it **Music** (this erases the drive).
+3. After plugging it in, it should appear at `/Volumes/Music`.
+
+#### Option B — Mac internal storage
+
+If you are not using a USB drive, groove can store everything in your home folder instead.  
+Use `~/Music` as the location in the next step.
+
+---
+
+### Step 7 — Get free API keys
+
+groove needs two free keys for tagging and chart data. Create them in your browser:
+
+**AcoustID** (audio fingerprinting):
+1. Go to https://acoustid.org/new-application
+2. Register or log in (free)
+3. Application name: `groove`, URL: `http://localhost`
+4. Copy the **API key**
+
+**Last.fm** (genres and charts):
+1. Go to https://www.last.fm/api/account/create
+2. Register or log in (free)
+3. Application name: `groove`
+4. Copy the **API key** and **Shared secret**
+
+Keep these handy — you will paste them in the next step.
+
+---
+
+### Step 8 — Run the setup wizard
+
+**If using a USB drive named Music:**
+
+```bash
+cd ~/groove
+uv run groove init /Volumes/Music
+```
+
+**If using your Mac's internal storage:**
+
+```bash
+cd ~/groove
+uv run groove init ~/Music
+```
+
+The wizard will:
+- Create a `groove` folder for your library, queue, and settings
+- Ask for your AcoustID and Last.fm keys (paste them when prompted; Enter to skip is OK but charts/tagging work better with keys)
+- Run a health check
+
+When it finishes you should see **Setup complete!**
+
+---
+
+### Step 9 — Run the health check
+
+```bash
+cd ~/groove
+uv run groove doctor
+```
+
+Look for green checkmarks. Important ones:
+
+- **yt-dlp** — should show version `2026.8.19` or newer
+- **ytdlp_js_runtime** — should say `deno found`
+- **ffmpeg** — should be OK
+- **free_space** — should show enough free disk space
+
+If anything is red, read the message next to it. Common fix for download problems:
+
+```bash
+brew install deno
+```
+
+Then run `uv run groove doctor` again.
+
+---
+
+### Step 10 — Start groove and open the web page
+
+**Easiest way (good for first try):**
+
+```bash
+cd ~/groove
+uv run groove serve
+```
+
+Leave this Terminal window open while you use groove.  
+Open your browser and go to: **http://localhost:8765**
+
+You should see the groove home page with an empty queue.
+
+To stop groove: click the Terminal window and press **Ctrl + C**.
+
+---
+
+### Step 11 — Auto-start on login (optional)
+
+If you used a **USB drive at `/Volumes/Music`**, you can have groove start automatically whenever you log in and the drive is plugged in:
+
+```bash
+cd ~/groove
+uv run groove install-agents
+```
+
+After this, groove runs in the background — you do not need to keep a Terminal window open.  
+Open **http://localhost:8765** anytime.
+
+To check it is running:
+
+```bash
+launchctl list | grep groove
+```
+
+> **Note:** Auto-start background logs are written to `/Volumes/Music/groove/logs/`.  
+> If you chose **Option B** (internal storage at `~/Music/groove`), use **Step 10** (manual `groove serve`) instead of `install-agents`, or ask Aaron to help configure auto-start for your setup.
+
+---
+
+### You are done!
+
+Try downloading something:
+
+1. Open **http://localhost:8765**
+2. Type `Sabrina Carpenter - Espresso` in the search box
+3. Press Enter
+4. Watch the status change: `pending` → `downloading` → `done`
+5. Go to **Library** to see your song
+
+---
+
+## For users: getting updates
+
+Aaron updates groove on GitHub. When he tells you an update is ready, run these three commands in Terminal:
+
+```bash
+cd ~/groove
+git pull
+uv sync
+```
+
+Then restart groove:
+
+**If you use `groove serve` in a Terminal window:**
+- Press **Ctrl + C** in that window
+- Run `uv run groove serve` again
+
+**If you use auto-start (`install-agents`):**
+
+```bash
+launchctl kickstart -k gui/$(id -u)/com.groove.server
+```
+
+Or simply **log out and back in** (with your USB drive plugged in, if you use one).
+
+That is all you need. **Do not edit files in `~/groove`.** Just pull updates.
+
+---
+
+## For users: everyday use
+
+### Download a song
+
+1. Open **http://localhost:8765**
+2. Type `Artist - Song Title`
+3. Press Enter
+
+Example: `Arctic Monkeys - Do I Wanna Know?`
+
+### Download an album
+
+1. Same page, type `Artist - Album Name`
+2. Change the **Kind** dropdown to **Album**
+3. Press Enter
+
+Example: `Arctic Monkeys - AM`
+
+### Download from a YouTube link
+
+Paste the full URL into the search box:
+
+```
+https://www.youtube.com/watch?v=xxxxxxxx
+```
+
+### Browse your library
+
+Click **Library** in the top menu, or open your music folder in Finder:
+
+- USB drive: `/Volumes/Music/groove/library/`
+- Internal storage: `~/Music/groove/library/`
+
+Folders look like: `Artist Name/Album Name (Year)/01 - Track Name.mp3`
+
+### Discover new music
+
+Click **Discoveries** in the top menu. Chart hits from Billboard, UK Top 40, and Last.fm appear here.
+
+By default, tracks that trend on multiple charts are **proposed** for download — they appear under **Awaiting your approval**. Click **Accept** to queue them, or **Dismiss** to hide them.
+
+Try **Random Album** to roll a random album from a year you pick.
+
+### Import a Spotify library
+
+1. Export your liked songs from https://exportify.net (free)
+2. Go to **http://localhost:8765/bulk**
+3. Upload the `.csv` file
+4. Review the preview and click **Confirm**
+
+### Queue many albums at once
+
+Go to **Bulk Add** → **Artist discography**, type an artist name, and pick albums.
+
+---
+
+## For users: what you should NOT change
+
+| Do not edit… | Why |
+|--------------|-----|
+| Anything inside `~/groove` | That is the app — Aaron updates it via GitHub |
+| `groove.toml` or `beets.yaml` in your data folder | Settings files — ask Aaron if something needs changing |
+| Files inside `library/` by hand | beets manages names and tags; use the web UI or ask Aaron |
+| `db/musiclib.db` | beets' internal database |
+
+**Safe to use:** the web UI at http://localhost:8765, and the Terminal commands in this README.
+
+---
+
+## For users: simple troubleshooting
+
+### Downloads keep failing (HTTP 403 / Forbidden)
+
+```bash
+cd ~/groove
+git pull
+uv sync
+brew install deno
+uv run groove doctor
+```
+
+Make sure **ytdlp_js_runtime** shows `deno found`, then restart groove.
+
+### The web page won't open
+
+Make sure groove is running:
+
+```bash
+cd ~/groove
+uv run groove serve
+```
+
+Then open **http://localhost:8765** (not https).
+
+### USB drive was unplugged
+
+Plug the drive back in. If you use auto-start, wait a few seconds and refresh the browser. Downloads resume automatically.
+
+### Something is stuck in the queue
+
+On the queue page, click **Retry**. If it still fails after 3 tries, try pasting a specific YouTube URL instead of a search.
+
+### Check free disk space
+
+```bash
+cd ~/groove
+uv run groove doctor
+```
+
+### Still stuck?
+
+Send Aaron:
+- A screenshot of the queue page
+- The last few lines from the log file:
+  - USB: `/Volumes/Music/groove/logs/server.log`
+  - Internal: `~/Music/groove/logs/server.log`
+
+---
+
+## Table of contents (detailed reference)
+
+1. [One-time setup (technical)](#1-one-time-setup-technical-reference)
+2. [Day-to-day usage (CLI)](#2-day-to-day-usage)
 3. [Spotify migration](#3-spotify-migration)
 4. [Discovery & automation](#4-discovery--automation)
-5. [Troubleshooting](#5-troubleshooting)
+5. [Troubleshooting (advanced)](#5-troubleshooting)
 6. [Under the hood](#6-under-the-hood)
 7. [Moving to a new computer](#7-moving-to-a-new-computer)
+8. [For developers](#for-developers)
 
 ---
 
-## 1. One-time setup
+## 1. One-time setup (technical reference)
 
-**Total time: 10–15 minutes.**
+This section mirrors the user guide above with more detail for anyone comfortable with the command line.
 
 ### 1.1 Prerequisites
 
 ```bash
-# macOS (Apple Silicon or Intel)
-brew install python@3.12 ffmpeg chromaprint
-
-# Install uv (fast Python package manager)
+brew install python@3.12 ffmpeg chromaprint deno git
 curl -LsSf https://astral.sh/uv/install.sh | sh
-source ~/.zshrc  # or open a new terminal
+source ~/.zshrc
 ```
 
 Verify:
 ```bash
-python3.12 --version   # Python 3.12.x
-ffmpeg -version        # ffmpeg version ...
-uv --version           # uv 0.x.x
+python3.12 --version
+deno --version
+ffmpeg -version
+uv --version
 ```
 
 ### 1.2 Prepare your drive
-
-Plug in your USB stick or HDD. Check its filesystem:
 
 ```bash
 diskutil info /Volumes/Music | grep "File System"
 ```
 
-- **exFAT** – ideal. Nothing to do.
-- **FAT32** – works. File size limit is 4 GB (fine for MP3s).
-- **NTFS** – **needs reformatting**. macOS can only read NTFS without
-  third-party drivers.
+- **exFAT** – ideal
+- **FAT32** – works (4 GB file size limit)
+- **NTFS** – reformat to exFAT in Disk Utility
 
-To reformat to exFAT (this erases the drive):
-1. Open **Disk Utility** (`⌘ Space` → Disk Utility).
-2. Select the drive (not a partition) in the left panel.
-3. Click **Erase** → Format: **ExFAT** → Name: **Music** → Erase.
+### 1.3 API keys
 
-Or via CLI:
-```bash
-diskutil eraseDisk ExFAT Music /dev/diskN   # replace N with your disk number
-# Find your disk number with: diskutil list
-```
+See [Step 7](#step-7--get-free-api-keys) in the user guide.
 
-### 1.3 Get API keys (free)
-
-**AcoustID** – for audio fingerprint matching (lets beets identify even
-poorly-tagged files):
-1. Go to https://acoustid.org/new-application
-2. Log in or register (free).
-3. Fill in Application name: `groove`, URL: `http://localhost`.
-4. Copy the API key.
-
-**Last.fm** – for genre tagging and chart data:
-1. Go to https://www.last.fm/api/account/create
-2. Log in or register (free).
-3. Fill in Application name: `groove`.
-4. Copy both the **API key** and the **Shared secret**.
-
-You'll paste these into `groove init` in the next step.
-
-### 1.4 Clone and install groove
+### 1.4 Clone and install
 
 ```bash
 git clone https://github.com/Aaron-Pereira/groove.git ~/groove
@@ -116,22 +492,15 @@ cd ~/groove
 uv sync
 ```
 
-Verify groove is available:
-```bash
-uv run groove --help
-```
-
 ### 1.5 Run `groove init`
 
 ```bash
+# External USB drive named "Music":
 uv run groove init /Volumes/Music
-```
 
-This will:
-- Create `library/`, `inbox/`, `state/`, `db/`, `logs/` inside `/Volumes/Music/groove/`.
-- Prompt for your AcoustID and Last.fm API keys.
-- Write `groove.toml` (your config file) to `/Volumes/Music/groove/groove.toml`.
-- Run `groove doctor` to verify everything works.
+# Or internal storage:
+uv run groove init ~/Music
+```
 
 ### 1.6 Run `groove doctor`
 
@@ -139,30 +508,25 @@ This will:
 uv run groove doctor
 ```
 
-You should see all green checkmarks. If anything is yellow/red, follow the
-instructions printed next to each check.
-
-### 1.7 Install the scheduled jobs (optional but recommended)
+### 1.7 Install scheduled jobs (optional)
 
 ```bash
 uv run groove install-agents
 ```
 
-This copies the launchd plist files to `~/Library/LaunchAgents/` and loads
-them. After this:
-- `groove serve` starts automatically on login and stays running.
-- Chart scraping runs daily at 07:00.
-- New-release checks run weekly on Monday at 07:05.
-- Metadata refresh runs weekly on Monday at 03:00.
+After this:
+- `groove serve` starts automatically on login (when the drive is available)
+- Chart scraping runs daily at 07:00
+- New-release checks run weekly on Monday at 07:05
+- Metadata refresh runs weekly on Monday at 03:00
 
 ### 1.8 Open the web UI
 
-Open `http://localhost:8765` in any browser. You should see the empty queue.
-
-If the server isn't running yet:
 ```bash
 uv run groove serve
 ```
+
+Open http://localhost:8765
 
 ---
 
@@ -170,114 +534,54 @@ uv run groove serve
 
 ### "I want one song"
 
-Open `http://localhost:8765`, type `Artist - Song Title` in the form, hit Enter.
-Watch the status go `pending → searching → downloading → tagging → done`.
-
-```
-Example: Sabrina Carpenter - Espresso
-```
-
-The file lands in `library/Sabrina Carpenter/Short n' Sweet (2024)/`.
+Open http://localhost:8765, type `Artist - Song Title`, hit Enter.
 
 ### "I want one album"
 
-Same form, type `Artist - Album Name`, change the **Kind** dropdown to **Album**.
+Same form, set **Kind** to **Album**, or:
 
-```
-Example: Arctic Monkeys - AM
-```
-
-Or from the CLI:
 ```bash
 uv run groove request --kind album "Arctic Monkeys - AM"
 ```
 
 ### "I want to download from a specific YouTube video"
 
-Paste the URL directly:
-```
-https://youtu.be/hLQl3WQQoQ0
-```
-
-beets will still match it against MusicBrainz for clean tags.
+Paste the URL directly into the request form.
 
 ### "I want to queue a YouTube playlist"
 
-Paste the playlist URL into the **Bulk Add → YouTube playlist** form:
-```
-https://www.youtube.com/playlist?list=PLxxxxxxxx
-```
+Bulk Add → YouTube playlist, or:
 
-Or from the CLI:
 ```bash
 uv run groove request --youtube-playlist "https://www.youtube.com/playlist?list=PLxxxxxxxx"
 ```
 
 ### "I want all of an artist's albums"
 
-Go to `/bulk` → **Artist discography** → type the artist name → pick albums.
+Go to `/bulk` → **Artist discography**, or:
 
-Or from the CLI:
 ```bash
 uv run groove request-discography "Arctic Monkeys"
-# Shows a numbered list; enter: 1,2,4  or  all
 ```
 
 ### "I ripped a CD"
 
-1. Drop the ripped folder into `/Volumes/Music/groove/inbox/cds/`.
-2. Run:
-   ```bash
-   uv run groove import-cds
-   ```
-3. beets opens an interactive terminal session. For each album it shows
-   candidate matches with confidence scores. Press Enter to accept the top
-   match, or use arrow keys + Enter to pick another.
+1. Drop the ripped folder into `inbox/cds/` inside your data folder.
+2. Run `uv run groove import-cds`
+3. Follow beets' interactive prompts in Terminal.
 
 ### "I want to browse what I have"
 
-Open `http://localhost:8765/library`. Use the search box to filter by artist,
-album, or title.
-
-Or just open `Finder → /Volumes/Music/groove/library/` — the folder layout is
-`Artist/Album (Year)/NN - Track.mp3`.
+http://localhost:8765/library or Finder → your `library/` folder.
 
 ---
 
 ## 3. Spotify migration
 
-**Total time: 5–10 minutes.**
-
-### Step 1: Export your Spotify library
-
-1. Open [exportify.net](https://exportify.net) in a browser.
-2. Click **Log in with Spotify** and authorize.
-3. Click **Export Liked Songs** (or select individual playlists).
-4. A `.csv` file downloads to your computer.
-
-### Step 2: Upload to groove
-
-1. Go to `http://localhost:8765/bulk`.
-2. Click **Upload file** → pick the `.csv` from Step 1.
-3. groove auto-detects the Exportify format.
-
-### Step 3: Preview
-
-groove shows you:
-- **X to queue** – tracks that will be downloaded.
-- **Y already in library** – tracks you already have.
-- **Z already pending** – tracks already queued.
-
-### Step 4: Confirm
-
-Click **Confirm – queue X tracks**. They're added at **low priority** so any
-on-demand requests you make still jump ahead.
-
-### Step 5: Watch the progress
-
-The queue page shows progress per track. For a 500-track library expect a few
-hours (mostly beets' MusicBrainz lookups). You can close the browser; it runs
-in the background.
+1. Export from https://exportify.net
+2. Upload at http://localhost:8765/bulk
+3. Review preview → **Confirm**
+4. Watch progress on the queue page (runs in background)
 
 ---
 
@@ -288,144 +592,97 @@ in the background.
 | Source | Schedule | Count |
 |--------|----------|-------|
 | Billboard Hot 100 | Daily 07:00 | 100 tracks |
+| Billboard 200 (albums) | Daily 07:00 | 200 albums |
 | UK Official Top 40 | Daily 07:00 | 40 tracks |
 | Last.fm global top | Daily 07:00 | 100 tracks |
 | Last.fm genre charts | Daily 07:00 | 50 per genre |
 | MusicBrainz new releases | Weekly Monday 07:05 | per watchlist artist |
 
-Results appear on the **Discoveries** page. Click **+ Queue** to download
-anything that catches your eye, or **Dismiss** to hide it.
+Results appear on **Discoveries**. Use **+ Queue** or **Dismiss**.
 
-### Auto-queue rules
+### Auto-queue and approval
 
-Tracks that appear on **2 or more** charts in the same week are automatically
-queued at low priority. Change the threshold in `groove.toml`:
+Tracks on **2 or more** charts in the same week are flagged. By default they require your approval before downloading (`require_approval = true` in `groove.toml`).
 
 ```toml
 [auto_queue]
-min_chart_appearances = 3   # raise to be more selective
+min_chart_appearances = 2
+require_approval = true   # false = download without asking
 ```
+
+### Random album by year
+
+http://localhost:8765/random-album — picks from Billboard year-end Top 200 (MusicBrainz fallback for older years).
 
 ### Artist watchlist
 
-Add artists to the watchlist at `/watchlist`. Enable **Auto-download new
-albums** to have groove queue new studio albums the week they're detected.
-
-From the CLI:
-```bash
-uv run groove request-discography "Fontaines D.C."
-```
+Add artists at `/watchlist`. Enable **Auto-download new albums** for automatic queuing.
 
 ### Customising genre charts
 
-Edit `groove.toml`:
 ```toml
 [discovery]
 genres = ["rock", "hip-hop", "electronic", "jazz", "folk"]
+billboard_200 = true
 ```
 
-Any Last.fm tag works as a genre. Restart the server (or wait for the next
-daily scrape) for changes to take effect.
+Restart the server after editing `groove.toml`.
 
 ---
 
 ## 5. Troubleshooting
 
-### "A download failed"
+### Download failed
 
-1. Click **Retry** in the queue UI. groove will try again (up to 3 attempts).
-2. If it keeps failing, paste a specific YouTube URL into the request form –
-   groove will use that URL instead of searching.
-3. Run `groove doctor` to check yt-dlp and ffmpeg are healthy.
+1. Click **Retry** in the queue UI (up to 3 attempts).
+2. Paste a specific YouTube URL.
+3. Run `uv run groove doctor` — check yt-dlp version and deno.
 
-### "beets picked the wrong album"
-
-```bash
-# Re-import and pick a different candidate interactively
-beet --config /Volumes/Music/groove/beets.yaml import -L "album:Name Of Album"
-```
-
-This opens beets' interactive picker for just that album.
-
-### "Album has wrong track numbers / every file has the same name"
-
-Re-import the **album folder** against MusicBrainz (fingerprint match + rewrite tags/filenames). Run from the `groove/` project directory:
+### beets picked the wrong album
 
 ```bash
-uv run beet --config ../groove-data/beets.yaml import -C -I \
-  "../groove-data/library/Artist Name/Album Name"
+uv run beet --config /path/to/your/groove/beets.yaml import -L "album:Name Of Album"
 ```
 
-Example:
+### Album has wrong track numbers
 
 ```bash
-uv run beet --config ../groove-data/beets.yaml import -C -I \
-  "../groove-data/library/Marvin Gaye/Here, My Dear"
+uv run beet --config /path/to/your/groove/beets.yaml import -C -I \
+  "/path/to/your/groove/library/Artist Name/Album Name"
 ```
 
-- `-C` – update files in place (don't move them)
-- `-I` – re-process even if already imported
-- Add `-t` to confirm matches interactively (`A` = apply, `M` = more candidates)
-- Add `--from-scratch` if every file was misnamed the same and tags need wiping first
+Or: `uv run groove metadata retag-albums`
 
-Or `cd` into the album folder and use `.` as the path. For many albums: `uv run groove metadata retag-albums`.
+### Wrong tags on one track
 
-### "A track has wrong tags"
+Edit in the web UI (`/library` → Edit), or:
 
-Option A – use the Edit button in the web UI (`/library` → Edit on any track).
-
-Option B – from the CLI:
 ```bash
-beet --config /Volumes/Music/groove/beets.yaml modify \
-  "artist:Old Artist" \
-  artist="Correct Artist" album="Correct Album"
+uv run beet --config /path/to/your/groove/beets.yaml modify \
+  "artist:Old Artist" artist="Correct Artist" album="Correct Album"
 ```
 
-### "I edited tags in Kid3 or Picard and groove doesn't see the change"
+### Tags edited outside groove (Kid3, Picard)
 
-Run:
 ```bash
 uv run groove metadata rescan
 ```
 
-This calls `beet update` which re-reads all files on disk and syncs beets'
-database.
+### Drive unplugged mid-download
 
-### "Drive unplugged mid-download"
+Worker pauses when the data folder is unreachable. Replug; resumes within ~5 seconds.
 
-The worker pauses automatically when `/Volumes/Music` is not reachable. Replug
-the drive; the worker resumes on the next poll cycle (within 5 seconds).
-
-### "Storage is getting full"
+### Storage full
 
 ```bash
 uv run groove doctor
 ```
 
-Shows free space and a warning when you're below 5 GB. To free up space:
-- Archive or delete old `state/archive/` files.
-- Run `beet --config ... duplicates -d` to find and remove duplicates.
-- Migrate to a larger drive (see Under the hood → Migrating drives).
-
-### "Starting over / wiping requests"
-
-The queue is in `state/requests.json`. You can:
-- Open the file in any text editor and delete records.
-- Or `echo '[]' > /Volumes/Music/groove/state/requests.json` to wipe it completely.
-
-Archived records are in `state/archive/` and can be deleted safely.
-
-### "The server won't start"
+### Server won't start
 
 ```bash
-# Check logs
-tail -50 /Volumes/Music/groove/logs/server.log
-tail -50 /Volumes/Music/groove/logs/server-error.log
-
-# Check launchd status
+tail -50 /path/to/your/groove/logs/server.log
 launchctl list | grep groove
-
-# Start manually to see errors in the terminal
 uv run groove serve
 ```
 
@@ -433,278 +690,129 @@ uv run groove serve
 
 ## 6. Under the hood
 
-### File layout on the drive
+### File layout (external drive example)
 
 ```
 /Volumes/Music/
-└── groove/                         ← the ONLY folder groove touches
-    ├── library/                    ← beets-managed (don't hand-edit paths)
-    │   └── Artist Name/
-    │       └── Album Name (2024)/
-    │           ├── 01 - Track.mp3
-    │           └── cover.jpg
+└── groove/
+    ├── library/              ← your music (beets-managed)
     ├── inbox/
-    │   ├── cds/                    ← drop CD rips here for groove import-cds
-    │   ├── downloads/              ← yt-dlp staging area (auto-cleaned after import)
-    │   └── review/                 ← weak-match files awaiting your decision
-    ├── state/
-    │   ├── requests.json           ← download queue
-    │   ├── discoveries.json        ← chart findings
-    │   ├── watchlist.json          ← artists to monitor
-    │   ├── chart_runs.json         ← scraper run audit log
-    │   ├── import_log.json         ← import history for every file
-    │   ├── .locks/                 ← filelock sentinel files (don't touch)
-    │   └── archive/                ← nightly-rotated old records
-    ├── db/
-    │   └── musiclib.db             ← beets' SQLite index (don't touch)
-    ├── logs/                       ← server, scraper, import logs
-    └── groove.toml                 ← your config
+    │   ├── cds/
+    │   ├── downloads/        ← temporary staging (auto-cleaned)
+    │   └── review/
+    ├── state/                ← queue, discoveries, watchlist
+    ├── db/musiclib.db        ← beets database
+    ├── logs/
+    ├── groove.toml           ← settings + API keys
+    └── beets.yaml
 ```
 
-### JSON file schemas
+Internal storage is the same structure under `~/Music/groove/`.
 
-**`state/requests.json`** – array of download requests:
-```json
-{
-  "id": "01HWXYZ...",
-  "raw_query": "Arctic Monkeys - AM",
-  "kind": "album",
-  "artist": "Arctic Monkeys",
-  "album": "AM",
-  "status": "pending",
-  "priority": "normal",
-  "attempts": 0,
-  "error": null,
-  "batch_id": null,
-  "created_at": "2026-04-23T10:15:00Z"
-}
-```
+### Config
 
-**`state/discoveries.json`** – chart findings:
-```json
-{
-  "id": "01HWX...",
-  "source": "billboard",
-  "chart_rank": 3,
-  "artist": "Sabrina Carpenter",
-  "title": "Espresso",
-  "auto_queued": false,
-  "dismissed": false,
-  "appearances": 1,
-  "seen_at": "2026-04-23T07:00:00Z"
-}
-```
-
-**`state/watchlist.json`** – artists to monitor:
-```json
-{
-  "artists": [
-    {
-      "name": "Arctic Monkeys",
-      "mb_artist_id": "ada7a83c-e3b1-40b1-96ba-43200a6cbc19",
-      "auto_download_new_albums": true,
-      "added_at": "2026-04-20T00:00:00Z"
-    }
-  ]
-}
-```
-
-### Beets plugins
-
-| Plugin | Purpose |
-|--------|---------|
-| `chroma` | AcoustID audio fingerprint – identifies files by audio content, not filename |
-| `fetchart` | Downloads cover art from MusicBrainz / Cover Art Archive |
-| `embedart` | Embeds cover art into every MP3 file |
-| `lastgenre` | Tags `genre` field from Last.fm |
-| `replaygain` | Writes ReplayGain loudness tags (via ffmpeg, no extra tool) |
-| `lyrics` | Fetches lyrics and writes `.lrc` sidecars |
-| `scrub` | Removes junk vendor tags on import |
-| `duplicates` | Detects and reports duplicate tracks |
-| `mbsync` | Re-fetches fresh MusicBrainz data for already-imported tracks |
-
-### Scheduled jobs (launchd)
-
-```bash
-# List running groove agents
-launchctl list | grep groove
-
-# Manually trigger a job
-launchctl start com.groove.charts
-
-# Temporarily disable a job
-launchctl unload ~/Library/LaunchAgents/com.groove.charts.plist
-
-# Re-enable it
-launchctl load -w ~/Library/LaunchAgents/com.groove.charts.plist
-
-# See all logs
-ls /Volumes/Music/groove/logs/
-```
-
-### Changing config
-
-All knobs are in `/Volumes/Music/groove/groove.toml`. Restart the server after
-editing:
-
-```bash
-# If running via launchd:
-launchctl kickstart -k gui/$(id -u)/com.groove.server
-
-# If running manually:
-# Ctrl-C then: uv run groove serve
-```
+All settings in `groove.toml` inside your **data** folder (not in `~/groove`).
 
 ### Audio quality
 
-YouTube's best-quality stream is ~128 kbps Opus. groove transcodes to
-**MP3 192 kbps CBR** – universally playable, no pretence of higher quality
-than the source. To change the bitrate:
+YouTube streams are ~128 kbps Opus. groove transcodes to **MP3 192 kbps**.
 
 ```toml
 [audio]
-bitrate = "320"   # kbps – larger files, same source fidelity
+bitrate = "320"
 ```
 
 ### Migrating to a new drive
 
 ```bash
-# Copy everything
-rsync -av --progress /Volumes/Music/ /Volumes/NewDrive/
-
-# Option A: rename the new volume to "Music" (zero config change)
-# Option B: update two lines in groove.toml:
-#   hdd_root = "/Volumes/NewDrive/groove"
-# And in beets.yaml:
-#   directory: /Volumes/NewDrive/groove/library
-#   library: /Volumes/NewDrive/groove/db/musiclib.db
-# Then run: groove metadata rescan
+rsync -av --progress /Volumes/Music/groove/ /Volumes/NewDrive/groove/
 ```
 
-Every file in `library/` has embedded MusicBrainz IDs and an AcoustID
-fingerprint, so even if the beets database is lost the library is
-self-describing and can be rebuilt with `beet import --noincremental`.
+Update `hdd_root` in `groove.toml` and paths in `beets.yaml`, then `uv run groove metadata rescan`.
 
 ### State backup
-
-groove runs a nightly rsync of `state/` to `~/groove-state-backup/`. To run
-it manually:
 
 ```bash
 uv run groove doctor --backup
 ```
 
+Nightly rsync to `~/groove-state-backup/` when agents are installed.
+
 ---
 
 ## 7. Moving to a new computer
 
-The **code** lives on GitHub. Your **music library, queue, and API keys** do
-**not** — they stay in a data folder (`groove-data/` or `/Volumes/Music/groove/`).
-Transfer both.
+The **app** is on GitHub (`~/groove`). Your **music and settings** are in your data folder — copy both.
 
-### What to bring with you
-
-| Must copy | Why | Approx size |
-|-----------|-----|-------------|
-| `groove-data/` (or `/Volumes/Music/groove/`) | Library, beets DB, queue, watchlist, logs | ~library size (often 10+ GB) |
-| `groove-data/groove.toml` | API keys + paths (never commit this) | tiny |
-| GitHub access | Clone the app on the new Mac | — |
-
-| Leave behind | Why |
-|--------------|-----|
-| `groove/.venv/` | Recreate with `uv sync` |
-| `.pytest_cache/`, `.ruff_cache/` | Dev junk |
-
-### On the old computer (before you leave)
-
-1. Make sure code is pushed:
-   ```bash
-   cd /path/to/groove
-   git status          # should be clean / pushed
-   git push origin main
-   ```
-2. Copy the data folder to an external drive / cloud / AirDrop folder:
-   ```bash
-   # Example: sibling layout (Documents/Coding Project/Music/)
-   rsync -avh --progress \
-     "/Users/YOU/Documents/Coding Project/Music/groove-data/" \
-     "/Volumes/Backup/groove-data/"
-   ```
-3. Confirm these exist on the backup:
-   - `groove-data/groove.toml` (API keys)
-   - `groove-data/beets.yaml`
-   - `groove-data/library/`
-   - `groove-data/db/musiclib.db`
-   - `groove-data/state/` (queue, watchlist, discoveries)
-
-### On the new computer
+### On the old Mac
 
 ```bash
-# 1. Tools
-brew install python@3.12 ffmpeg chromaprint git
+cd ~/groove && git push origin main   # developers only
+rsync -avh ~/Music/groove/ /Volumes/Backup/groove-data/   # or /Volumes/Music/groove/
+```
+
+### On the new Mac
+
+Follow [First-time setup](#for-users-first-time-setup-on-your-mac) steps 1–5, then restore your data folder instead of running a fresh `init`:
+
+```bash
+rsync -avh /Volumes/Backup/groove-data/ ~/Music/groove/
+# Update hdd_root in groove.toml if the path changed
+uv run groove doctor
+uv run groove serve
+```
+
+---
+
+## For developers
+
+### Quick start (dev)
+
+```bash
+brew install python@3.12 ffmpeg chromaprint deno
 curl -LsSf https://astral.sh/uv/install.sh | sh
-source ~/.zshrc
-
-# 2. GitHub SSH (if you use SSH remotes)
-#    Settings → SSH and GPG keys → New SSH key
-#    Or clone with HTTPS instead.
-
-# 3. App
-git clone git@github.com:Aaron-Pereira/groove.git ~/groove
-# or: git clone https://github.com/Aaron-Pereira/groove.git ~/groove
+git clone https://github.com/Aaron-Pereira/groove.git ~/groove
 cd ~/groove
 uv sync
-
-# 4. Restore data next to the repo (recommended layout)
-mkdir -p ~/Documents/Coding\ Project/Music
-rsync -avh --progress /Volumes/Backup/groove-data/ \
-  ~/Documents/Coding\ Project/Music/groove-data/
-
-# 5. Point config at the restored folder
-# Edit groove-data/groove.toml → set hdd_root to the absolute path, e.g.:
-#   hdd_root = "/Users/YOU/Documents/Coding Project/Music/groove-data"
-#
-# Edit groove-data/beets.yaml paths to match:
-#   directory: .../groove-data/library
-#   library:   .../groove-data/db/musiclib.db
-#   import.log: .../groove-data/logs/beets-import.log
-
-# 6. Health check + start
-uv run groove doctor
-uv run groove serve   # http://127.0.0.1:8765
+uv run groove init /Volumes/Music    # or ~/Music
+uv run groove serve
 ```
 
-If you use an external drive named `Music` instead, put the data at
-`/Volumes/Music/groove/` and run `uv run groove init /Volumes/Music` only when
-starting fresh — for a restore, just copy the folder and fix paths as above.
-
-### Quick verify
+### Making changes
 
 ```bash
-uv run groove doctor
-uv run beet --config ../groove-data/beets.yaml stats
+cd ~/groove
+# edit code in src/groove/
+uv run pytest tests/
+git add -A && git commit -m "Describe your change"
+git push origin main
 ```
 
-You should see your track count. Open http://127.0.0.1:8765 — library and queue
-should look familiar.
+Users pull with `git pull && uv sync` — see [Getting updates](#for-users-getting-updates).
 
-### Optional: launchd again
+### Key dependencies
+
+- **yt-dlp** `>=2026.8.19` with `[default]` extras (includes yt-dlp-ejs)
+- **deno** on PATH for YouTube JS challenges
+- **beets** for import and tagging
+
+### Beets plugins
+
+| Plugin | Purpose |
+|--------|---------|
+| `chroma` | AcoustID fingerprinting |
+| `fetchart` / `embedart` | Cover art |
+| `lastgenre` | Genre from Last.fm |
+| `replaygain` | Loudness normalization |
+| `lyrics` | Lyrics sidecars |
+| `scrub` | Clean junk tags |
+| `duplicates` | Duplicate detection |
+| `mbsync` | Refresh MusicBrainz data |
+
+### Scheduled jobs
 
 ```bash
-uv run groove install-agents
-```
-
-### If you only have the music files (lost beets DB)
-
-Re-import from disk (tags are often still inside the MP3s):
-
-```bash
-uv run beet --config ../groove-data/beets.yaml import -A -C \
-  ../groove-data/library
-```
-
-Or re-match against MusicBrainz:
-
-```bash
-uv run groove metadata retag-albums --dry-run
+launchctl list | grep groove
+launchctl start com.groove.charts
+launchctl unload ~/Library/LaunchAgents/com.groove.server.plist
 ```
