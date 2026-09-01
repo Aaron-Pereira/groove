@@ -19,7 +19,7 @@ from datetime import UTC, datetime, timedelta
 
 from groove.config import Settings
 from groove.downloader import download, strip_track_numbers, tag_downloaded_files
-from groove.importer import import_directory
+from groove.importer import album_in_library, cleanup_download_dir, import_directory
 from groove.store import DownloadRequest, Stores
 
 log = logging.getLogger(__name__)
@@ -100,6 +100,26 @@ class Worker:
 
     def _handle(self, request: DownloadRequest) -> None:
         try:
+            # Retries of an album that already landed in the library (e.g. after
+            # a partial download + duplicate-keep import) just re-hit YouTube
+            # rate limits and spawn more duplicate albums. Mark done instead.
+            if (
+                request.kind == "album"
+                and request.attempts > 0
+                and request.artist
+                and request.album
+                and album_in_library(self.settings, request.artist, request.album)
+            ):
+                log.info(
+                    "Request %s: album '%s - %s' already in library after prior attempt — marking done",
+                    request.id, request.artist, request.album,
+                )
+                if request.download_dir:
+                    from pathlib import Path
+                    cleanup_download_dir(Path(request.download_dir))
+                self._transition(request.id, "done", completed_at=datetime.now(UTC), error=None)
+                return
+
             self._transition(request.id, "searching")
             resolved = self._resolve(request)
 
@@ -164,6 +184,9 @@ class Worker:
 
             self._transition(request.id, "done", completed_at=datetime.now(UTC))
             log.info("Request %s done via %s", request.id, source_kind)
+            if request.kind == "album":
+                # Brief pause between albums when bulk-queueing Billboard 200 etc.
+                time.sleep(2)
 
         except Exception as exc:
             log.exception("Request %s failed: %s", request.id, exc)
@@ -195,17 +218,42 @@ class Worker:
         so they are retried rather than left frozen forever.
         """
         stale_statuses = {"searching", "downloading", "tagging"}
+        max_retries = self.settings.worker.max_retries
         for req in self.stores.requests.all():
             if req.status in stale_statuses:
+                attempts = req.attempts + 1
+                if attempts >= max_retries:
+                    log.warning(
+                        "Stale request %s ('%s') was '%s' — max retries reached, marking failed",
+                        req.id,
+                        req.raw_query,
+                        req.status,
+                    )
+                    self.stores.requests.update_one(
+                        req.id,
+                        {
+                            "status": "failed",
+                            "attempts": attempts,
+                            "error": f"Interrupted in '{req.status}' too many times",
+                            "completed_at": datetime.now(UTC),
+                        },
+                    )
+                    continue
                 log.warning(
-                    "Resetting stale request %s ('%s') from '%s' → pending",
+                    "Resetting stale request %s ('%s') from '%s' → pending (attempt %d/%d)",
                     req.id,
                     req.raw_query,
                     req.status,
+                    attempts,
+                    max_retries,
                 )
                 self.stores.requests.update_one(
                     req.id,
-                    {"status": "pending", "error": f"Reset after restart (was: {req.status})"},
+                    {
+                        "status": "pending",
+                        "attempts": attempts,
+                        "error": f"Reset after restart (was: {req.status})",
+                    },
                 )
 
     def _recover_stale_inflight_requests(self) -> None:

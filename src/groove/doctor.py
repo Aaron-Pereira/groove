@@ -101,6 +101,7 @@ def run_doctor(settings) -> DoctorReport:
 
     # -- Binaries -------------------------------------------------------
     report.add(_check_binary("yt-dlp", ["yt-dlp", "--version"]))
+    report.add(_check_ytdlp_js_runtime())
     report.add(_check_binary("ffmpeg", ["ffmpeg", "-version"]))
     report.add(_check_binary("beets", [_find_beet(), "--version"]))
 
@@ -168,6 +169,23 @@ def backup_state(settings) -> CheckResult:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _check_ytdlp_js_runtime() -> CheckResult:
+    """yt-dlp needs deno/node on PATH to solve YouTube JS challenges."""
+    for runtime in ("deno", "node"):
+        if shutil.which(runtime):
+            return CheckResult(
+                "ytdlp_js_runtime",
+                "ok",
+                f"{runtime} found for yt-dlp JS challenges",
+            )
+    return CheckResult(
+        "ytdlp_js_runtime",
+        "warning",
+        "No JS runtime (deno/node) on PATH — YouTube downloads may fail with HTTP 403. "
+        "Install: brew install deno",
+    )
 
 
 def _check_binary(name: str, cmd: list[str]) -> CheckResult:

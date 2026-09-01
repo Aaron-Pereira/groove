@@ -97,6 +97,26 @@ def test_merge_keeps_distinct_albums_by_same_artist(stores):
     assert all(d.appearances == 1 for d in stored)
 
 
+def test_extract_error_prefers_exception_message():
+    from groove.importer import _extract_error
+
+    out = (
+        "Traceback (most recent call last):\n"
+        '  File "beets/importer.py", line 1, in <module>\n'
+        "sqlite3.OperationalError: database is locked\n"
+    )
+    assert _extract_error(out) == "sqlite3.OperationalError: database is locked"
+    assert "Traceback" not in (_extract_error(out) or "")
+
+
+def test_is_duplicate_outcome():
+    from groove.importer import _is_duplicate_outcome
+
+    assert _is_duplicate_outcome("found duplicates: [1, 2]\ndefault action for duplicates: m")
+    assert _is_duplicate_outcome("This album is already in the library!")
+    assert not _is_duplicate_outcome("Tagging: Some Album")
+
+
 def test_fetch_year_albums_uses_cache(tmp_path):
     """A cached year is served from disk without any network access."""
     from groove.discovery.year_end import fetch_year_albums

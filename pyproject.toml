@@ -14,7 +14,7 @@ dependencies = [
     "pyacoustid>=1.3.0",
     # [default] pulls in yt-dlp-ejs, the JS challenge solver YouTube requires
     # (also needs a JS runtime on PATH, e.g. `brew install deno`)
-    "yt-dlp[default]>=2025.6.0",
+    "yt-dlp[default]>=2026.8.19",
     "fastapi>=0.111.0",
     "uvicorn[standard]>=0.30.0",
     "jinja2>=3.1.4",

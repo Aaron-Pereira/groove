@@ -34,8 +34,13 @@ _DUP_ALREADY_IN_LIB_RE = re.compile(
     r"already\s+in\s+(?:the\s+)?library",
     re.IGNORECASE,
 )
+_DUP_KEEP_RE = re.compile(
+    r"duplicate[- ]keep|found duplicates|default action for duplicates",
+    re.IGNORECASE,
+)
 _SKIPPED_PATH_RE = re.compile(r"Skipped\s+\d+\s+paths?\.", re.IGNORECASE)
 _SKIPPING_RE = re.compile(r"^\s*Skipping\.?\s*$", re.IGNORECASE | re.MULTILINE)
+_NO_FILES_IMPORTED_RE = re.compile(r"No files imported from", re.IGNORECASE)
 
 
 # ---------------------------------------------------------------------------
@@ -156,13 +161,16 @@ def import_directory(
 
     success = proc.returncode == 0
     leftover_error: str | None = None
+    files_left = _count_audio_files(directory) if source_kind != "cd" else 0
 
-    # beet can exit 0 while leaving files: duplicate singleton, or other skips.
-    if success and source_kind != "cd" and _count_audio_files(directory) > 0:
-        if _DUP_ALREADY_IN_LIB_RE.search(output_scan):
-            # Same song already in the library — treat as success and remove the
-            # redundant inbox copy so the worker does not retry forever.
+    # beets can exit 0 (or crash) while leaving inbox audio: duplicates,
+    # quiet skips, empty folders after a previous partial import, etc.
+    if source_kind != "cd" and files_left > 0:
+        if _is_duplicate_outcome(output_scan):
+            # Same album/track already in the library — treat as success and
+            # remove the redundant inbox copy so the worker does not retry.
             _remove_audio_files_in_dir(directory)
+            _remove_junk_files_in_dir(directory)
             if _count_audio_files(directory) > 0:
                 log.error(
                     "Could not clear duplicate inbox files in %s\n%s",
@@ -172,11 +180,12 @@ def import_directory(
                 success = False
                 leftover_error = "beets reported duplicate but inbox files could not be removed"
             else:
+                success = True
                 log.info(
                     "beets skipped duplicate (already in library); removed inbox copy under %s",
                     directory,
                 )
-        elif _looks_like_quiet_skip(output_scan):
+        elif success and _looks_like_quiet_skip(output_scan):
             # quiet_fallback: skip => beets exits 0, leaves files in place.
             # Auto-retry with as-is import so requests do not get stuck forever.
             log.warning(
@@ -215,11 +224,12 @@ def import_directory(
                     log.info("As-is fallback import succeeded for %s", directory)
                 elif _inbox_should_clear_after_beets_ok(
                     retry_proc.returncode, remaining, retry_scan
-                ):
+                ) or _is_duplicate_outcome(retry_scan):
                     # Duplicates / quiet skips often omit machine-readable text
                     # (import.log file handler, log line prefixes), or beets exits 0
                     # without moving when config uses copy — clear stale inbox audio.
                     _remove_audio_files_in_dir(directory)
+                    _remove_junk_files_in_dir(directory)
                     if _count_audio_files(directory) == 0:
                         success = True
                         imported, skipped, review = _parse_output(output)
@@ -245,7 +255,7 @@ def import_directory(
                         remaining,
                         retry_output[-2500:],
                     )
-        else:
+        elif success:
             log.error(
                 "beet import returned success but audio files remain in %s\n%s",
                 directory,
@@ -254,6 +264,23 @@ def import_directory(
             success = False
             leftover_error = (
                 "beet import left files in the download folder; see beets output in log"
+            )
+        else:
+            # Non-zero exit with leftover audio (often a plugin Traceback after a
+            # duplicate merge). Prefer a useful error over "Traceback (most recent…".
+            leftover_error = _extract_error(output) or (
+                "beet import failed; audio left in the download folder"
+            )
+    elif source_kind != "cd" and files_left == 0:
+        # No audio left — either imported successfully, or only junk (webp thumbs
+        # from failed yt-dlp attempts) remains. Clear junk either way.
+        _remove_junk_files_in_dir(directory)
+        if not success and (_is_duplicate_outcome(output_scan) or _NO_FILES_IMPORTED_RE.search(output_scan)):
+            # Duplicate-keep / empty inbox after a prior successful move — done.
+            success = True
+            log.info(
+                "beets left no audio in %s (duplicate or empty); treating as success",
+                directory,
             )
 
     if import_log is not None:
@@ -328,10 +355,42 @@ def _parse_output(output: str) -> tuple[list[str], list[str], list[str]]:
 
 
 def _extract_error(output: str) -> str | None:
-    for line in output.splitlines():
-        if "error" in line.lower() or "traceback" in line.lower():
+    """Pull a useful error message from beets stdout/stderr.
+
+    Prefer the last non-empty traceback frame or ERROR line over the bare
+    'Traceback (most recent call last):' header, which is useless alone.
+    """
+    lines = [ln.rstrip() for ln in output.splitlines() if ln.strip()]
+    if not lines:
+        return None
+
+    # Capture a full traceback block if present
+    for i, line in enumerate(lines):
+        if "traceback" in line.lower():
+            block = lines[i : i + 12]
+            # Prefer the final Exception: message in the block
+            for bline in reversed(block):
+                if re.match(r"^[\w.]*(?:Error|Exception|Warning):", bline):
+                    return bline[:500]
+            joined = " | ".join(block[-4:])
+            return joined[:500]
+
+    for line in reversed(lines):
+        if "error" in line.lower():
             return line.strip()[:500]
-    return output.strip()[-500:] if output.strip() else None
+
+    return lines[-1][:500]
+
+
+def _is_duplicate_outcome(output: str) -> bool:
+    """True when beets decided the album/track is already in the library."""
+    if _DUP_ALREADY_IN_LIB_RE.search(output):
+        return True
+    if _DUP_KEEP_RE.search(output):
+        return True
+    if re.search(r"\bis\s+already\s+in\s+(?:the\s+)?library", output, re.IGNORECASE):
+        return True
+    return False
 
 
 def _run_beet(cmd: list[str], *, env: dict[str, str]) -> tuple[subprocess.CompletedProcess[str] | None, str | None]:
@@ -359,12 +418,9 @@ def _inbox_should_clear_after_beets_ok(returncode: int, files_left: int, scan_te
     """
     if returncode != 0 or files_left <= 0:
         return False
-    if _DUP_ALREADY_IN_LIB_RE.search(scan_text):
+    if _is_duplicate_outcome(scan_text):
         return True
     if _looks_like_quiet_skip(scan_text):
-        return True
-    # e.g. "This album is …" duplicated across lines / color spans
-    if re.search(r"\bis\s+already\s+in\s+(?:the\s+)?library", scan_text, re.IGNORECASE):
         return True
     return False
 
@@ -393,6 +449,23 @@ def _remove_audio_files_in_dir(directory: Path) -> int:
     return removed
 
 
+def _remove_junk_files_in_dir(directory: Path) -> int:
+    """Remove non-audio leftovers (e.g. .webp thumbnails from failed yt-dlp runs)."""
+    junk_exts = frozenset({"webp", "jpg", "jpeg", "png", "part", "ytdl", "temp"})
+    removed = 0
+    try:
+        for p in list(directory.iterdir()):
+            if p.is_file() and p.suffix.lower().lstrip(".") in junk_exts:
+                try:
+                    p.unlink()
+                    removed += 1
+                except OSError as exc:
+                    log.debug("Could not remove junk %s: %s", p, exc)
+    except OSError:
+        pass
+    return removed
+
+
 def _count_audio_files(directory: Path) -> int:
     """Count audio files anywhere under directory (recursive)."""
     n = 0
@@ -403,6 +476,37 @@ def _count_audio_files(directory: Path) -> int:
     except OSError:
         return 0
     return n
+
+
+def cleanup_download_dir(directory: Path) -> None:
+    """Remove leftover audio and junk files from a staging download folder."""
+    if not directory.is_dir():
+        return
+    _remove_audio_files_in_dir(directory)
+    _remove_junk_files_in_dir(directory)
+
+
+def album_in_library(settings: Settings, artist: str, album: str) -> bool:
+    """True if beets already has at least one track for this artist+album."""
+    if not artist or not album:
+        return False
+    beet_exe = _find_beet()
+    cmd = [
+        beet_exe,
+        "--config",
+        str(settings.beets_config),
+        "ls",
+        "-a",
+        f"album:{album}",
+        f"albumartist:{artist}",
+    ]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
+    if proc.returncode != 0:
+        return False
+    return any(line.strip() for line in proc.stdout.splitlines())
 
 
 def _find_beet() -> str:

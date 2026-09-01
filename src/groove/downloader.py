@@ -28,8 +28,11 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import shutil
 import subprocess
 import sys
+import time
 import uuid
 from pathlib import Path
 from typing import Any
@@ -43,6 +46,15 @@ _YT_SEARCH_POOL = 15
 
 # Duration tolerance (seconds) when matching a Spotify track to YouTube Music
 _DURATION_TOLERANCE_S = 10
+
+# Pause between tracks in an album download to reduce YouTube 403 rate-limits
+_INTER_TRACK_DELAY_S = 2.0
+_POST_403_COOLDOWN_S = 8.0
+
+# Retries / backoff when yt-dlp hits HTTP 403 (YouTube rate limiting)
+_YTDLP_403_RETRIES = 3
+_YTDLP_403_BACKOFF_S = (5.0, 15.0, 30.0)
+_ALT_VIDEO_CANDIDATES = 5
 
 
 # ---------------------------------------------------------------------------
@@ -501,6 +513,82 @@ def _ytmusic_find_video(
     return best_id
 
 
+def _ytmusic_candidate_video_ids(
+    ytmusic: Any,
+    artist: str,
+    title: str,
+    *,
+    preferred_id: str | None = None,
+) -> list[str]:
+    """Return unique video IDs to try for a track, preferred ID first."""
+    ids: list[str] = []
+    seen: set[str] = set()
+
+    def _add(vid: str | None) -> None:
+        if vid and vid not in seen:
+            seen.add(vid)
+            ids.append(vid)
+
+    _add(preferred_id)
+    query = f"{artist} {title}".strip()
+    try:
+        results = ytmusic.search(query, filter="songs", limit=_ALT_VIDEO_CANDIDATES)
+    except Exception as exc:
+        log.debug("ytmusicapi fallback search failed for '%s': %s", query, exc)
+        return ids
+    for result in results or []:
+        _add(result.get("videoId"))
+    return ids
+
+
+def _download_track_with_fallbacks(
+    ytmusic: Any,
+    dest_dir: Path,
+    codec: str,
+    bitrate: str,
+    *,
+    video_id: str | None,
+    artist: str,
+    title: str,
+    album: str,
+    track_number: int,
+    albumartist: str | None,
+    year: str | None,
+    backend: str,
+) -> list[Path]:
+    """Download one album track, trying alternate YouTube Music videos on 403."""
+    candidates = _ytmusic_candidate_video_ids(
+        ytmusic, artist, title, preferred_id=video_id,
+    )
+    last_err = "no video id"
+    for i, vid in enumerate(candidates):
+        if i > 0:
+            log.info("Trying alternate video for '%s' (%s)", title, vid)
+            time.sleep(_POST_403_COOLDOWN_S)
+        url = f"https://music.youtube.com/watch?v={vid}"
+        res = _run_ytdlp(url, dest_dir, codec, bitrate, is_playlist=False, backend=backend)
+        if res.success:
+            for fp in res.files:
+                try:
+                    _tag_one_file(
+                        fp,
+                        artist=artist,
+                        title=title,
+                        album=album,
+                        track_number=track_number,
+                        albumartist=albumartist,
+                        year=year,
+                    )
+                except Exception as exc:
+                    log.warning("Failed to tag %s: %s", fp, exc)
+            return res.files
+        last_err = res.error or last_err
+        if "403" not in (res.error or "") and "Forbidden" not in (res.error or ""):
+            break
+    log.warning("Download failed for '%s': %s", title, last_err)
+    return []
+
+
 # ---------------------------------------------------------------------------
 # YouTube Music playlist URL handler
 # ---------------------------------------------------------------------------
@@ -590,53 +678,35 @@ def _download_ytmusic_playlist_url(
     )
 
     downloaded: list[Path] = []
-    track_metadata: list[dict[str, Any]] = []
     failed: list[str] = []
 
     for idx, track in enumerate(tracks):
         video_id = track.get("videoId")
         if not video_id:
             continue
+        if downloaded or failed:
+            time.sleep(_INTER_TRACK_DELAY_S)
 
         title = track.get("title") or ""
         artists = track.get("artists") or []
         artist = ", ".join(a["name"] for a in artists if a.get("name")) if artists else album_artist
-
         track_number = album_track_numbers.get(video_id, idx + 1)
 
-        track_url = f"https://music.youtube.com/watch?v={video_id}"
-        res = _run_ytdlp(
-            track_url, dest_dir, codec, bitrate,
-            is_playlist=False, backend="ytmusic_playlist",
+        files = _download_track_with_fallbacks(
+            ytmusic, dest_dir, codec, bitrate,
+            video_id=video_id,
+            artist=artist,
+            title=title,
+            album=album_name,
+            track_number=track_number,
+            albumartist=album_artist or None,
+            year=album_year or None,
+            backend="ytmusic_playlist",
         )
-        if res.success:
-            downloaded.extend(res.files)
-            for fp in res.files:
-                track_metadata.append({
-                    "file": fp,
-                    "artist": artist,
-                    "title": title,
-                    "album": album_name,
-                    "track_number": track_number,
-                })
+        if files:
+            downloaded.extend(files)
         else:
-            log.warning("Download failed for '%s': %s", title, res.error)
             failed.append(title)
-
-    # Tag all downloaded files with correct YouTube Music metadata
-    for meta in track_metadata:
-        try:
-            _tag_one_file(
-                meta["file"],
-                artist=meta["artist"],
-                title=meta["title"],
-                album=meta["album"],
-                track_number=meta["track_number"],
-                albumartist=album_artist or None,
-                year=album_year or None,
-            )
-        except Exception as exc:
-            log.warning("Failed to tag %s: %s", meta["file"], exc)
 
     if downloaded:
         if failed:
@@ -751,6 +821,9 @@ def _ytmusic_album(
             video_id = track.get("videoId")
             if not video_id:
                 continue
+            if downloaded or failed:
+                time.sleep(_INTER_TRACK_DELAY_S)
+
             track_title = track.get("title", "")
             track_artists = track.get("artists") or []
             track_artist = (
@@ -760,26 +833,21 @@ def _ytmusic_album(
             raw_num = track.get("trackNumber") or track.get("index")
             track_number = int(raw_num) if raw_num is not None else idx + 1
 
-            url = f"https://music.youtube.com/watch?v={video_id}"
-            res = _run_ytdlp(url, dest_dir, codec, bitrate, is_playlist=False, backend="ytmusic")
-            if res.success:
-                for fp in res.files:
-                    try:
-                        _tag_one_file(
-                            fp,
-                            artist=track_artist,
-                            title=track_title,
-                            album=album_display,
-                            track_number=track_number,
-                            albumartist=album_artist or None,
-                            year=album_year or None,
-                        )
-                    except Exception as exc:
-                        log.warning("Failed to tag %s: %s", fp, exc)
-                downloaded.extend(res.files)
+            files = _download_track_with_fallbacks(
+                ytmusic, dest_dir, codec, bitrate,
+                video_id=video_id,
+                artist=track_artist,
+                title=track_title,
+                album=album_display,
+                track_number=track_number,
+                albumartist=album_artist or None,
+                year=album_year or None,
+                backend="ytmusic",
+            )
+            if files:
+                downloaded.extend(files)
             else:
                 failed.append(track_title or video_id)
-                log.warning("Track download failed: %s — %s", track_title, res.error)
 
         if downloaded:
             if failed:
@@ -886,7 +954,9 @@ def _ytsearch_flat_entries(search_term: str, *, limit: int) -> list[dict[str, An
         f"ytsearch{limit}:{search_term}",
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=120, env=_ytdlp_env(),
+        )
     except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
         log.warning("yt-dlp search listing failed: %s", exc)
         return []
@@ -917,13 +987,49 @@ def _run_ytdlp(
     is_playlist: bool = False,
     backend: str = "youtube",
 ) -> DownloadResult:
-    """Run a single yt-dlp extract-audio invocation.
+    """Run a single yt-dlp extract-audio invocation, retrying on HTTP 403.
 
     Returns only the file(s) produced by THIS invocation, not everything in
     dest_dir — album downloads run this once per track into a shared folder,
     and returning pre-existing files caused every track's metadata to be
     re-applied to earlier files (albums ended up tagged as the last track).
     """
+    last: DownloadResult | None = None
+    for attempt in range(_YTDLP_403_RETRIES + 1):
+        last = _run_ytdlp_once(
+            source, dest_dir, codec, bitrate,
+            is_playlist=is_playlist, backend=backend,
+        )
+        if last.success:
+            return last
+        err = last.error or ""
+        if "403" not in err and "Forbidden" not in err:
+            return last
+        if attempt >= _YTDLP_403_RETRIES:
+            break
+        delay = _YTDLP_403_BACKOFF_S[min(attempt, len(_YTDLP_403_BACKOFF_S) - 1)]
+        log.warning(
+            "yt-dlp 403 for %s — retry %d/%d after %.0fs",
+            source, attempt + 1, _YTDLP_403_RETRIES, delay,
+        )
+        time.sleep(delay)
+        # Drop orphan thumbnails from the failed attempt so they don't pile up
+        _clear_orphan_thumbs(dest_dir)
+    return last or DownloadResult(
+        success=False, dest_dir=dest_dir, files=[], error="yt-dlp failed",
+    )
+
+
+def _run_ytdlp_once(
+    source: str,
+    dest_dir: Path,
+    codec: str,
+    bitrate: str,
+    *,
+    is_playlist: bool = False,
+    backend: str = "youtube",
+) -> DownloadResult:
+    """Single yt-dlp invocation (no retry)."""
     preexisting: set[Path] = (
         {p for p in dest_dir.iterdir() if p.is_file()} if dest_dir.exists() else set()
     )
@@ -954,6 +1060,7 @@ def _run_ytdlp(
             capture_output=True,
             text=True,
             timeout=600,
+            env=_ytdlp_env(),
         )
     except subprocess.TimeoutExpired:
         return DownloadResult(
@@ -1236,7 +1343,9 @@ def fetch_playlist_entries(url: str) -> list[dict[str, Any]]:
         url,
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=120, env=_ytdlp_env(),
+        )
     except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
         raise RuntimeError(f"yt-dlp failed: {exc}") from exc
 
@@ -1277,7 +1386,9 @@ def search_youtube(query: str) -> str | None:
         f"ytsearch1:{query}",
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=30, env=_ytdlp_env(),
+        )
         if result.returncode == 0:
             url = result.stdout.strip()
             return url if url else None
@@ -1345,6 +1456,20 @@ def _clear_staging_dir(dest_dir: Path) -> None:
         pass
 
 
+def _clear_orphan_thumbs(dest_dir: Path) -> None:
+    """Remove thumbnail leftovers (.webp/.jpg) from failed yt-dlp attempts."""
+    junk = {".webp", ".jpg", ".jpeg", ".png", ".part"}
+    try:
+        for p in dest_dir.iterdir():
+            if p.is_file() and p.suffix.lower() in junk:
+                try:
+                    p.unlink()
+                except OSError:
+                    pass
+    except OSError:
+        pass
+
+
 def _clean_error(stderr: str) -> str:
     """Extract the most useful line from yt-dlp's stderr."""
     lines = [line.strip() for line in stderr.splitlines() if line.strip()]
@@ -1360,3 +1485,26 @@ def _find_ytdlp() -> str:
     if venv_bin.exists():
         return str(venv_bin)
     return "yt-dlp"
+
+
+def _ytdlp_env() -> dict[str, str]:
+    """Subprocess environment with JS runtimes (deno/node) on PATH.
+
+    yt-dlp needs a JS runtime for YouTube's bot challenges.  launchd and bare
+    uvicorn processes often inherit a minimal PATH without Homebrew.
+    """
+    env = os.environ.copy()
+    extra: list[str] = []
+    for candidate in (
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        str(Path.home() / ".deno" / "bin"),
+    ):
+        if Path(candidate).is_dir():
+            extra.append(candidate)
+    deno = shutil.which("deno", path=os.pathsep.join(extra + [env.get("PATH", "")]))
+    if deno:
+        extra.insert(0, str(Path(deno).parent))
+    if extra:
+        env["PATH"] = os.pathsep.join(extra + [env.get("PATH", "")])
+    return env
