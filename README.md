@@ -28,6 +28,22 @@
 **Time needed:** about 20–30 minutes the first time.  
 **You do not need to know how to code.** You will copy and paste commands into the **Terminal** app.
 
+### Read this first — three separate steps
+
+Setting up groove is **not** just cloning from GitHub. You need **three** things:
+
+| Step | What | Command | How often |
+|------|------|---------|-----------|
+| **1. Install the app** | Download groove from GitHub | `git clone` + `uv sync` (Steps 1–5) | Once |
+| **2. Create your library** | Build folders, database, and settings on your Mac | `uv run groove init ~/Music` (Step 7) | **Once — do not skip** |
+| **3. Run groove** | Open the web page and download music | `uv run groove serve` (Step 9) | Every time you use it |
+
+**Cloning GitHub only does step 1.** It does **not** create your music library, database, or config. If you run `groove serve` without running `groove init` first, the web page may open but downloads will not work properly and your library will be empty.
+
+Step 7 (`groove init`) is the step that **initialises your personal groove library** on your Mac.
+
+---
+
 ### Two folders — keep this in mind
 
 This guide sets up groove to store everything on your **Mac's internal disk**. groove uses two separate folders:
@@ -35,9 +51,9 @@ This guide sets up groove to store everything on your **Mac's internal disk**. g
 | Folder | What it is | You touch it? |
 |--------|------------|---------------|
 | `~/groove` | The **app** (downloaded from GitHub) | **No** — only run the update commands below |
-| `~/Music/groove` | Your **music library**, download queue, settings, and API keys | **No** — groove manages this; use the web UI instead |
+| `~/Music/groove` | Your **personal library** — music files, database, queue, settings, API keys | **No** — created by `groove init`; groove manages it via the web UI |
 
-Your MP3 files live in `~/Music/groove/library/`. The app code in `~/groove` stays separate.
+Your MP3 files live in `~/Music/groove/library/`. The app code in `~/groove` stays separate. **Until you run `groove init`, the `~/Music/groove` folder does not exist.**
 
 **How you start groove:** each time you want to download music or open the web page, you run one command in Terminal (`uv run groove serve`) and leave that window open. When you are done, press **Ctrl + C** to stop it. There is no background auto-start in this setup.
 
@@ -151,6 +167,17 @@ uv run groove --help
 
 You should see a list of groove commands.
 
+> **Stop — you are not finished yet.**  
+> The app is installed, but **your library does not exist yet**. You still need **Step 7** (`groove init ~/Music`) before you can download music. Do not skip to `groove serve` until Step 7 is complete.
+
+**Optional check** — this should fail or show nothing useful until after Step 7:
+
+```bash
+ls ~/Music/groove
+```
+
+If you see `No such file or directory`, that is normal — Step 7 creates it.
+
 ---
 
 ### Step 6 — Get free API keys
@@ -173,23 +200,47 @@ Keep these handy — you will paste them in the next step.
 
 ---
 
-### Step 7 — Run the setup wizard
+### Step 7 — Create your library (`groove init`) — required
 
-This creates `~/Music/groove/` — your library, queue, settings, and logs all live here.
+This is the most important one-time step. It **initialises your personal groove library** on your Mac — it does not come from GitHub.
+
+Run:
 
 ```bash
 cd ~/groove
 uv run groove init ~/Music
 ```
 
+**What this creates** (all inside `~/Music/groove/`):
+
+| Created | Purpose |
+|---------|---------|
+| `library/` | Where your downloaded MP3s are stored |
+| `db/musiclib.db` | The **library database** (beets index of everything you own) |
+| `state/` | Download queue, chart discoveries, watchlist |
+| `inbox/` | Staging area for downloads and CD rips |
+| `logs/` | Error logs if something goes wrong |
+| `groove.toml` | Your settings and API keys |
+| `beets.yaml` | Tagging and import rules |
+
 The wizard will:
-- Create `~/Music/groove/` with subfolders for your library, queue, and settings
+- Create all of the above
 - Ask for your AcoustID and Last.fm keys (paste them when prompted; Enter to skip is OK but charts/tagging work better with keys)
 - Run a health check
 
 When it finishes you should see **Setup complete!**
 
+**Verify your library was created:**
+
+```bash
+ls ~/Music/groove
+```
+
+You should see folders like `library`, `db`, `state`, and files `groove.toml` and `beets.yaml`.
+
 You can open the music folder in Finder anytime: **Go → Home → Music → groove**.
+
+> **Only run `groove init` once.** Running it again on the same Mac is usually unnecessary. If you already ran it and see `Setup complete!`, skip to Step 8.
 
 ---
 
@@ -218,6 +269,8 @@ Then run `uv run groove doctor` again.
 ---
 
 ### Step 9 — Start groove (do this every time you use it)
+
+**Only do this after Step 7 (`groove init`) has finished successfully.**
 
 groove does **not** run in the background automatically with this setup. Each time you want to download music or open the web page:
 
@@ -382,6 +435,30 @@ Go to **Bulk Add** → **Artist discography**, type an artist name, and pick alb
 ---
 
 ## For users: simple troubleshooting
+
+### I cloned from GitHub but nothing works / library is empty
+
+You probably skipped **Step 7**. Cloning only installs the app — it does **not** create your library or database.
+
+Run this once:
+
+```bash
+cd ~/groove
+uv run groove init ~/Music
+```
+
+Wait for **Setup complete!**, then:
+
+```bash
+uv run groove serve
+```
+
+Check the library folder exists:
+
+```bash
+ls ~/Music/groove/library
+ls ~/Music/groove/db/musiclib.db
+```
 
 ### Downloads keep failing (HTTP 403 / Forbidden)
 
