@@ -460,6 +460,36 @@ ls ~/Music/groove/library
 ls ~/Music/groove/db/musiclib.db
 ```
 
+### `groove doctor` says "hard drive not found" or "Drive root not found"
+
+This usually means **your library was never created** (`groove init` not run yet), or groove is looking in the wrong place.
+
+**Fix 1 — create the library (most common):**
+
+```bash
+cd ~/groove
+uv run groove init ~/Music
+uv run groove doctor
+```
+
+**Fix 2 — library exists but doctor still fails:**
+
+Point doctor at your config file explicitly:
+
+```bash
+uv run groove doctor --config ~/Music/groove/groove.toml
+```
+
+**Check which path groove is using:**
+
+```bash
+ls ~/Music/groove/groove.toml
+```
+
+If that file exists, `groove doctor` should find it automatically (after you `git pull` the latest app update). If not, use `--config` as above.
+
+The error mentions `/Volumes/Music/groove` when no config file was found — that is the old default for USB drives, not your Mac's internal library at `~/Music/groove`.
+
 ### Downloads keep failing (HTTP 403 / Forbidden)
 
 ```bash

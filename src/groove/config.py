@@ -154,13 +154,16 @@ def load_settings(path: Path | None = None) -> Settings:
     # Search order:
     #   1–2: explicit path / GROOVE_CONFIG
     #   3:   sibling ../groove-data/groove.toml (workspace-local data + config)
-    #   4:   repo config/groove.toml (dev override)
-    #   5:   /Volumes/Music/groove/groove.toml (typical external-drive install)
+    #   4:   ~/Music/groove/groove.toml (default internal-storage user install)
+    #   5:   repo config/groove.toml (dev override)
+    #   6:   /Volumes/Music/groove/groove.toml (external USB drive install)
     _workspace_data_config = _repo_root().parent / "groove-data" / "groove.toml"
+    _home_music_config = Path.home() / "Music" / "groove" / "groove.toml"
     candidates = [
         path,
         Path(env_config) if env_config else None,
         _workspace_data_config,
+        _home_music_config,
         _repo_root() / "config" / "groove.toml",
         _DEFAULT_CONFIG_PATH,
     ]

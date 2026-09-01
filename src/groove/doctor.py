@@ -96,7 +96,10 @@ def run_doctor(settings) -> DoctorReport:
         report.add(CheckResult(
             "hdd_root",
             "error",
-            f"Drive root not found: {settings.hdd_root}\nRun `groove init` first.",
+            f"Library folder not found: {settings.hdd_root}\n"
+            "Run `groove init ~/Music` once to create your library (internal storage), "
+            "or `groove init /Volumes/Music` if you use a USB drive named Music. "
+            "If you already ran init, try: groove doctor --config ~/Music/groove/groove.toml",
         ))
 
     # -- Binaries -------------------------------------------------------
