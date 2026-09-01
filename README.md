@@ -8,7 +8,7 @@
 | **Tag & organize** | Automatic metadata via [beets](https://beets.io/) — cover art, genres, track numbers |
 | **Discover** | Billboard, UK Top 40, Last.fm charts; random album by year; chart suggestions you can approve |
 | **Web UI** | Local dashboard at **http://localhost:8765** — queue, library, discoveries |
-| **Runs in the background** | Optional auto-start on login |
+| **How you run it** | Start with one Terminal command when you want to use it (`groove serve`) |
 
 **Stack:** Python 3.12 · FastAPI · beets · yt-dlp · Typer
 
@@ -30,14 +30,16 @@
 
 ### Two folders — keep this in mind
 
-groove uses **two separate places** on your Mac:
+This guide sets up groove to store everything on your **Mac's internal disk**. groove uses two separate folders:
 
 | Folder | What it is | You touch it? |
 |--------|------------|---------------|
 | `~/groove` | The **app** (downloaded from GitHub) | **No** — only run the update commands below |
-| Your **music data** folder (see step 6) | Your library, queue, settings, API keys | **No** — groove manages this; use the web UI instead |
+| `~/Music/groove` | Your **music library**, download queue, settings, and API keys | **No** — groove manages this; use the web UI instead |
 
-Your music files, queue, and settings live in the **data** folder — not inside `~/groove`.
+Your MP3 files live in `~/Music/groove/library/`. The app code in `~/groove` stays separate.
+
+**How you start groove:** each time you want to download music or open the web page, you run one command in Terminal (`uv run groove serve`) and leave that window open. When you are done, press **Ctrl + C** to stop it. There is no background auto-start in this setup.
 
 ---
 
@@ -48,8 +50,8 @@ You will need:
 - A Mac running a recent version of macOS
 - An internet connection
 - About 30 minutes
-- A **USB drive** (recommended, 64 GB or larger) **or** free space on your Mac's internal disk
-- Two free website accounts for API keys (step 7) — AcoustID and Last.fm
+- **Free disk space on your Mac** — at least 20 GB to start (more as your library grows; music is stored in `~/Music/groove/`)
+- Two free website accounts for API keys (step 6) — AcoustID and Last.fm
 
 ---
 
@@ -151,24 +153,7 @@ You should see a list of groove commands.
 
 ---
 
-### Step 6 — Choose where your music library lives
-
-Pick **one** option:
-
-#### Option A — USB drive (recommended)
-
-1. Plug in a USB drive.
-2. In **Disk Utility**, format it as **ExFAT** and name it **Music** (this erases the drive).
-3. After plugging it in, it should appear at `/Volumes/Music`.
-
-#### Option B — Mac internal storage
-
-If you are not using a USB drive, groove can store everything in your home folder instead.  
-Use `~/Music` as the location in the next step.
-
----
-
-### Step 7 — Get free API keys
+### Step 6 — Get free API keys
 
 groove needs two free keys for tagging and chart data. Create them in your browser:
 
@@ -188,16 +173,9 @@ Keep these handy — you will paste them in the next step.
 
 ---
 
-### Step 8 — Run the setup wizard
+### Step 7 — Run the setup wizard
 
-**If using a USB drive named Music:**
-
-```bash
-cd ~/groove
-uv run groove init /Volumes/Music
-```
-
-**If using your Mac's internal storage:**
+This creates `~/Music/groove/` — your library, queue, settings, and logs all live here.
 
 ```bash
 cd ~/groove
@@ -205,15 +183,17 @@ uv run groove init ~/Music
 ```
 
 The wizard will:
-- Create a `groove` folder for your library, queue, and settings
+- Create `~/Music/groove/` with subfolders for your library, queue, and settings
 - Ask for your AcoustID and Last.fm keys (paste them when prompted; Enter to skip is OK but charts/tagging work better with keys)
 - Run a health check
 
 When it finishes you should see **Setup complete!**
 
+You can open the music folder in Finder anytime: **Go → Home → Music → groove**.
+
 ---
 
-### Step 9 — Run the health check
+### Step 8 — Run the health check
 
 ```bash
 cd ~/groove
@@ -237,44 +217,27 @@ Then run `uv run groove doctor` again.
 
 ---
 
-### Step 10 — Start groove and open the web page
+### Step 9 — Start groove (do this every time you use it)
 
-**Easiest way (good for first try):**
+groove does **not** run in the background automatically with this setup. Each time you want to download music or open the web page:
+
+1. Open **Terminal**
+2. Run:
 
 ```bash
 cd ~/groove
 uv run groove serve
 ```
 
-Leave this Terminal window open while you use groove.  
-Open your browser and go to: **http://localhost:8765**
+3. Leave this Terminal window **open** the whole time you are using groove
+4. Open your browser and go to: **http://localhost:8765**
 
-You should see the groove home page with an empty queue.
+You should see the groove home page. Downloads and the library only work while this command is running.
 
-To stop groove: click the Terminal window and press **Ctrl + C**.
+**To stop groove** when you are finished: click the Terminal window and press **Ctrl + C**.  
+You can close the browser tab anytime.
 
----
-
-### Step 11 — Auto-start on login (optional)
-
-If you used a **USB drive at `/Volumes/Music`**, you can have groove start automatically whenever you log in and the drive is plugged in:
-
-```bash
-cd ~/groove
-uv run groove install-agents
-```
-
-After this, groove runs in the background — you do not need to keep a Terminal window open.  
-Open **http://localhost:8765** anytime.
-
-To check it is running:
-
-```bash
-launchctl list | grep groove
-```
-
-> **Note:** Auto-start background logs are written to `/Volumes/Music/groove/logs/`.  
-> If you chose **Option B** (internal storage at `~/Music/groove`), use **Step 10** (manual `groove serve`) instead of `install-agents`, or ask Aaron to help configure auto-start for your setup.
+> **Tip:** Bookmark http://localhost:8765 in your browser. You still need to run `uv run groove serve` in Terminal first — the bookmark only works while that window is open.
 
 ---
 
@@ -288,6 +251,37 @@ Try downloading something:
 4. Watch the status change: `pending` → `downloading` → `done`
 5. Go to **Library** to see your song
 
+**Next time you want to use groove**, repeat [Step 9](#step-9--start-groove-do-this-every-time-you-use-it) — open Terminal, run `uv run groove serve`, then open http://localhost:8765.
+
+---
+
+## For users: starting and stopping groove
+
+This is the routine you will use **every day** (after the one-time setup above).
+
+### Start
+
+```bash
+cd ~/groove
+uv run groove serve
+```
+
+Wait until you see a line like `Uvicorn running on http://127.0.0.1:8765`, then open **http://localhost:8765** in your browser.
+
+**Keep the Terminal window open.** If you close it or press Ctrl + C, groove stops and the web page will not load.
+
+### Stop
+
+In the Terminal window where `groove serve` is running, press **Ctrl + C**.
+
+### Your music is always on disk
+
+Stopping groove does **not** delete your music. Your files stay in `~/Music/groove/library/` whether or not groove is running. You only need to start groove when you want to download something new or use the web UI.
+
+### Optional: USB drive instead of internal storage
+
+If you later move to an external USB drive named **Music**, run `uv run groove init /Volumes/Music` on a fresh setup (or ask Aaron to help migrate). USB setups can use `uv run groove install-agents` for auto-start on login. **This guide does not use that** — stick with `~/Music/groove` and manual `groove serve` unless Aaron changes your setup.
+
 ---
 
 ## For users: getting updates
@@ -300,19 +294,15 @@ git pull
 uv sync
 ```
 
-Then restart groove:
+Then restart groove (if it was running):
 
-**If you use `groove serve` in a Terminal window:**
-- Press **Ctrl + C** in that window
-- Run `uv run groove serve` again
-
-**If you use auto-start (`install-agents`):**
+1. In the Terminal window where `groove serve` is running, press **Ctrl + C**
+2. Start it again:
 
 ```bash
-launchctl kickstart -k gui/$(id -u)/com.groove.server
+cd ~/groove
+uv run groove serve
 ```
-
-Or simply **log out and back in** (with your USB drive plugged in, if you use one).
 
 That is all you need. **Do not edit files in `~/groove`.** Just pull updates.
 
@@ -320,9 +310,11 @@ That is all you need. **Do not edit files in `~/groove`.** Just pull updates.
 
 ## For users: everyday use
 
+**First:** start groove in Terminal (`cd ~/groove && uv run groove serve`). See [Starting and stopping groove](#for-users-starting-and-stopping-groove).
+
 ### Download a song
 
-1. Open **http://localhost:8765**
+1. Open **http://localhost:8765** (with `groove serve` running)
 2. Type `Artist - Song Title`
 3. Press Enter
 
@@ -346,12 +338,14 @@ https://www.youtube.com/watch?v=xxxxxxxx
 
 ### Browse your library
 
-Click **Library** in the top menu, or open your music folder in Finder:
+Click **Library** in the top menu (with groove running), or open your music in Finder:
 
-- USB drive: `/Volumes/Music/groove/library/`
-- Internal storage: `~/Music/groove/library/`
+**Finder:** Home → **Music** → **groove** → **library**
 
+Full path: `~/Music/groove/library/`  
 Folders look like: `Artist Name/Album Name (Year)/01 - Track Name.mp3`
+
+You can browse MP3s in Finder even when groove is not running. The web **Library** page needs `groove serve` to be running.
 
 ### Discover new music
 
@@ -379,8 +373,8 @@ Go to **Bulk Add** → **Artist discography**, type an artist name, and pick alb
 | Do not edit… | Why |
 |--------------|-----|
 | Anything inside `~/groove` | That is the app — Aaron updates it via GitHub |
-| `groove.toml` or `beets.yaml` in your data folder | Settings files — ask Aaron if something needs changing |
-| Files inside `library/` by hand | beets manages names and tags; use the web UI or ask Aaron |
+| `~/Music/groove/groove.toml` or `beets.yaml` | Settings files — ask Aaron if something needs changing |
+| Files inside `~/Music/groove/library/` by hand | beets manages names and tags; use the web UI or ask Aaron |
 | `db/musiclib.db` | beets' internal database |
 
 **Safe to use:** the web UI at http://localhost:8765, and the Terminal commands in this README.
@@ -403,18 +397,14 @@ Make sure **ytdlp_js_runtime** shows `deno found`, then restart groove.
 
 ### The web page won't open
 
-Make sure groove is running:
+groove is probably not running. Start it:
 
 ```bash
 cd ~/groove
 uv run groove serve
 ```
 
-Then open **http://localhost:8765** (not https).
-
-### USB drive was unplugged
-
-Plug the drive back in. If you use auto-start, wait a few seconds and refresh the browser. Downloads resume automatically.
+Wait for `Uvicorn running on http://127.0.0.1:8765`, then open **http://localhost:8765** (not https). The Terminal window must stay open.
 
 ### Something is stuck in the queue
 
@@ -431,9 +421,8 @@ uv run groove doctor
 
 Send Aaron:
 - A screenshot of the queue page
-- The last few lines from the log file:
-  - USB: `/Volumes/Music/groove/logs/server.log`
-  - Internal: `~/Music/groove/logs/server.log`
+- The last few lines from: `~/Music/groove/logs/server.log`  
+  (In Terminal: `tail -30 ~/Music/groove/logs/server.log`)
 
 ---
 
@@ -470,15 +459,13 @@ ffmpeg -version
 uv --version
 ```
 
-### 1.2 Prepare your drive
+### 1.2 Storage layout (default: internal disk)
 
-```bash
-diskutil info /Volumes/Music | grep "File System"
-```
+Data root: `~/Music/groove/` (created by `groove init ~/Music`).
 
-- **exFAT** – ideal
-- **FAT32** – works (4 GB file size limit)
-- **NTFS** – reformat to exFAT in Disk Utility
+Ensure enough free space: `df -h ~`
+
+**Optional — external USB drive:** format as **ExFAT**, name it **Music**, then `uv run groove init /Volumes/Music`. See [Optional: USB drive](#optional-usb-drive-instead-of-internal-storage) in the user guide.
 
 ### 1.3 API keys
 
@@ -495,12 +482,10 @@ uv sync
 ### 1.5 Run `groove init`
 
 ```bash
-# External USB drive named "Music":
-uv run groove init /Volumes/Music
-
-# Or internal storage:
 uv run groove init ~/Music
 ```
+
+Creates `~/Music/groove/`. Users start the app manually with `uv run groove serve` each session.
 
 ### 1.6 Run `groove doctor`
 
@@ -508,25 +493,15 @@ uv run groove init ~/Music
 uv run groove doctor
 ```
 
-### 1.7 Install scheduled jobs (optional)
-
-```bash
-uv run groove install-agents
-```
-
-After this:
-- `groove serve` starts automatically on login (when the drive is available)
-- Chart scraping runs daily at 07:00
-- New-release checks run weekly on Monday at 07:05
-- Metadata refresh runs weekly on Monday at 03:00
-
-### 1.8 Open the web UI
+### 1.7 Start the web UI (each session)
 
 ```bash
 uv run groove serve
 ```
 
-Open http://localhost:8765
+Open http://localhost:8765. Press Ctrl + C to stop.
+
+**Optional — `install-agents`:** only for USB setups at `/Volumes/Music/groove` (auto-start + daily chart scrape). Not used for internal `~/Music/groove` + manual serve.
 
 ---
 
@@ -690,24 +665,23 @@ uv run groove serve
 
 ## 6. Under the hood
 
-### File layout (external drive example)
+### File layout (internal storage — default)
 
 ```
-/Volumes/Music/
-└── groove/
-    ├── library/              ← your music (beets-managed)
-    ├── inbox/
-    │   ├── cds/
-    │   ├── downloads/        ← temporary staging (auto-cleaned)
-    │   └── review/
-    ├── state/                ← queue, discoveries, watchlist
-    ├── db/musiclib.db        ← beets database
-    ├── logs/
-    ├── groove.toml           ← settings + API keys
-    └── beets.yaml
+~/Music/groove/
+├── library/              ← your music (beets-managed)
+├── inbox/
+│   ├── cds/
+│   ├── downloads/        ← temporary staging (auto-cleaned)
+│   └── review/
+├── state/                ← queue, discoveries, watchlist
+├── db/musiclib.db        ← beets database
+├── logs/                 ← server.log (useful for troubleshooting)
+├── groove.toml           ← settings + API keys
+└── beets.yaml
 ```
 
-Internal storage is the same structure under `~/Music/groove/`.
+USB setups use the same layout under `/Volumes/Music/groove/`.
 
 ### Config
 
@@ -774,7 +748,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 git clone https://github.com/Aaron-Pereira/groove.git ~/groove
 cd ~/groove
 uv sync
-uv run groove init /Volumes/Music    # or ~/Music
+uv run groove init ~/Music
 uv run groove serve
 ```
 
